@@ -1,0 +1,55 @@
+export type LineItem = { id: string; description: string; quantity: number; amount: number; position: number; confidence?: number };
+export type Receipt = {
+  id: string;
+  created_at?: string;
+  merchant: string;
+  date: string;
+  currency: string;
+  line_items: LineItem[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  payment_method: string;
+  category: string;
+  box_id: string;
+  original_image_url: string | null;
+  confidence: Record<string, number>;
+  notes: string;
+};
+export type ReceiptDraft = {
+  id?: string;
+  merchant: string;
+  date: string;
+  currency: string;
+  subtotal: string;
+  tax: string;
+  total: string;
+  payment_method: string;
+  category: string;
+  box_id: string;
+  notes: string;
+  confidence: Record<string, number>;
+  line_items: Array<{ id: string; description: string; quantity: string; amount: string; confidence: number }>;
+};
+export type ExtractedReceiptDraft = {
+  merchant: string | null;
+  date: string | null;
+  currency: string | null;
+  subtotal: number | null;
+  tax: number | null;
+  total: number | null;
+  payment_method: string | null;
+  suggested_category: string | null;
+  notes: string | null;
+  confidence: Record<string, number>;
+  line_items: Array<{ description: string; quantity: number | null; amount: number | null; confidence: number }>;
+};
+export type Box = {
+  id: string;
+  name: string;
+  illustration: string;
+  color: string;
+  budget: number | null;
+  sort_order?: number;
+  created_at: string;
+};

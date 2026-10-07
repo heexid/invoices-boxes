@@ -1,0 +1,2 @@
+[functions.extract-receipt]
+verify_jwt = true

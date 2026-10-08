@@ -8,6 +8,8 @@ export type Receipt = {
   line_items: LineItem[];
   subtotal: number;
   tax: number;
+  tax_enabled?: boolean;
+  tax_rate?: number | null;
   total: number;
   payment_method: string;
   category: string;
@@ -23,6 +25,9 @@ export type ReceiptDraft = {
   currency: string;
   subtotal: string;
   tax: string;
+  tax_enabled: boolean;
+  tax_mode: "amount" | "percent";
+  tax_input: string;
   total: string;
   payment_method: string;
   category: string;

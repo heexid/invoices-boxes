@@ -18,6 +18,8 @@ create table if not exists public.receipts (
   currency text not null default 'IDR',
   subtotal numeric(14,2) not null default 0,
   tax numeric(14,2) not null default 0,
+  tax_enabled boolean not null default false,
+  tax_rate numeric(10,4),
   total numeric(14,2) not null default 0,
   payment_method text not null default '',
   category text not null default 'Unfiled',
@@ -34,7 +36,7 @@ create table if not exists public.line_items (
   receipt_id uuid not null references public.receipts(id) on delete cascade,
   description text not null,
   quantity numeric(10,2) not null default 1,
-  amount numeric(14,2) not null default 0,
+  amount numeric(20,8) not null default 0,
   position integer not null default 0,
   confidence numeric(4,3) not null default 0
 );
@@ -107,14 +109,15 @@ begin
   if v_box_id is not null and not exists (select 1 from public.boxes where id = v_box_id and user_id = v_user_id) then
     raise exception 'Box is not available to this account' using errcode = '42501';
   end if;
-  insert into public.receipts as existing_receipt (id,user_id,merchant,date,currency,subtotal,tax,total,payment_method,category,box_id,original_image_url,confidence,notes)
+  insert into public.receipts as existing_receipt (id,user_id,merchant,date,currency,subtotal,tax,tax_enabled,tax_rate,total,payment_method,category,box_id,original_image_url,confidence,notes)
   values (v_receipt_id,v_user_id,trim(coalesce(p_receipt->>'merchant','')),nullif(p_receipt->>'date','')::date,
     upper(coalesce(nullif(p_receipt->>'currency',''),'IDR')),coalesce(nullif(p_receipt->>'subtotal','')::numeric,0),
-    coalesce(nullif(p_receipt->>'tax','')::numeric,0),coalesce(nullif(p_receipt->>'total','')::numeric,0),
+    coalesce(nullif(p_receipt->>'tax','')::numeric,0),coalesce(nullif(p_receipt->>'tax_enabled','')::boolean,false),nullif(p_receipt->>'tax_rate','')::numeric,
+    coalesce(nullif(p_receipt->>'total','')::numeric,0),
     coalesce(p_receipt->>'payment_method',''),coalesce(p_receipt->>'category','Unfiled'),v_box_id,
     nullif(p_receipt->>'original_image_url',''),coalesce(p_receipt->'confidence','{}'::jsonb),coalesce(p_receipt->>'notes',''))
   on conflict (id) do update set merchant=excluded.merchant,date=excluded.date,currency=excluded.currency,subtotal=excluded.subtotal,
-    tax=excluded.tax,total=excluded.total,payment_method=excluded.payment_method,category=excluded.category,box_id=excluded.box_id,
+    tax=excluded.tax,tax_enabled=excluded.tax_enabled,tax_rate=excluded.tax_rate,total=excluded.total,payment_method=excluded.payment_method,category=excluded.category,box_id=excluded.box_id,
     original_image_url=excluded.original_image_url,confidence=excluded.confidence,notes=excluded.notes
   where existing_receipt.user_id=v_user_id;
   if not found then raise exception 'Receipt is not available to this account' using errcode = '42501'; end if;

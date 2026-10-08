@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowDownToLine, ArrowLeft, ArrowRight, Box as BoxIcon, Check, ChevronDown, ChevronLeft, ChevronRight, FileImage, FileText, LogIn, LogOut, MoreVertical, Pencil, Plus, Search, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowRight, Box as BoxIcon, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, FileImage, FileText, Info, LogIn, LogOut, MoreVertical, Pencil, Plus, Search, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { demoBoxes, demoReceipts, formatDay, formatIDR, formatMoney, formatShortDate, formatTotals } from "@/lib/data";
 import { getSupabase } from "@/lib/supabase";
 import { ReceiptEditor } from "@/components/receipt-editor";
 import { EmptyStateIllustration, type EmptyIllustrationKind } from "@/components/empty-state-illustration";
-import { blankReceiptDraft, extractionToDraft, receiptToDraft } from "@/lib/receipt-draft";
+import { blankReceiptDraft, calculateReceiptTotals, extractionToDraft, receiptToDraft } from "@/lib/receipt-draft";
 import type { Box, ExtractedReceiptDraft, Receipt, ReceiptDraft } from "@/lib/types";
 
 type Screen = "drawer" | "boxes" | "box" | "print-preview" | "recent" | "receipt" | "profile" | "auth";
@@ -62,20 +62,21 @@ export default function HomePage() {
   const [authBusy, setAuthBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
-  const [toastKind, setToastKind] = useState<"info" | "success">("info");
+  const [toastKind, setToastKind] = useState<"info" | "success" | "error">("info");
   const toastTimer = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const supabase = useMemo(() => getSupabase(), []);
 
   useEffect(() => () => { if (fileUrl) URL.revokeObjectURL(fileUrl); }, [fileUrl]);
 
-  const showToast = useCallback((message: string, kind: "info" | "success") => {
+  const showToast = useCallback((message: string, kind: "info" | "success" | "error") => {
     setToast(message); setToastKind(kind);
     if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(""), 2800);
   }, []);
   const notify = useCallback((message: string) => showToast(message, "info"), [showToast]);
   const notifySuccess = useCallback((message: string) => showToast(message, "success"), [showToast]);
+  const notifyError = useCallback((message: string) => showToast(message, "error"), [showToast]);
   useEffect(() => () => { if (toastTimer.current !== null) window.clearTimeout(toastTimer.current); }, []);
 
   const loadAccount = useCallback(async () => {
@@ -88,10 +89,10 @@ export default function HomePage() {
       supabase.from("boxes").select("*").order("sort_order").order("created_at"),
       supabase.from("receipts").select("*").order("created_at", { ascending: false }),
     ]);
-    if (boxError || receiptError) { notify(`Couldn’t load your drawer: ${(boxError ?? receiptError)?.message ?? "check your Supabase setup"}`); return; }
+    if (boxError || receiptError) { notifyError(`Couldn’t load your drawer: ${(boxError ?? receiptError)?.message ?? "check your Supabase setup"}`); return; }
     const ids = (receiptRows ?? []).map((row) => row.id);
     const { data: itemRows, error: itemError } = ids.length ? await supabase.from("line_items").select("*").in("receipt_id", ids).order("position") : { data: [], error: null };
-    if (itemError) { notify(`Couldn’t load receipt items: ${itemError.message}`); return; }
+    if (itemError) { notifyError(`Couldn’t load receipt items: ${itemError.message}`); return; }
     const grouped = new Map<string, Array<Record<string, unknown>>>();
     for (const item of itemRows ?? []) grouped.set(item.receipt_id, [...(grouped.get(item.receipt_id) ?? []), item]);
     setBoxes((boxRows ?? []) as Box[]);
@@ -99,7 +100,7 @@ export default function HomePage() {
     setSelectedBox((current) => boxRows?.some((box) => box.id === current)
       ? current
       : (boxRows?.[0] as Box | undefined)?.id ?? "");
-  }, [supabase, notify]);
+  }, [supabase, notifyError]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -237,27 +238,31 @@ export default function HomePage() {
   async function saveReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isDemo || !supabase) { notify("Sign in to save a receipt to your drawer."); return; }
-    if (!draft.merchant.trim() || !draft.total) { notify("Add a merchant and total to continue."); return; }
+    const completedItems = draft.line_items.filter((item) => item.description.trim() || item.amount.trim());
+    if (!draft.merchant.trim() || !draft.date || !draft.currency || completedItems.length === 0 || completedItems.some((item) => !item.description.trim() || item.amount.trim() === "" || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 || !Number.isFinite(Number(item.amount)) || Number(item.amount) < 0)) {
+      notifyError("Add the required receipt details and complete each item with a quantity and price."); return;
+    }
+    if (draft.tax_enabled && (!draft.tax_input.trim() || !Number.isFinite(Number(draft.tax_input)) || Number(draft.tax_input) < 0)) { notifyError("Add a valid tax amount or percentage."); return; }
     setSaving(true);
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("Please sign in again to save this receipt.");
-      const total = Number(draft.total); const chosenBox = boxes.find((box) => box.id === draft.box_id);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date) || !/^[A-Z]{3}$/.test(draft.currency.toUpperCase()) || !Number.isFinite(total) || total < 0) throw new Error("Check the receipt date, three-letter currency, and total.");
-      const payload = { ...(editorReceiptId ? { id: editorReceiptId } : {}), merchant: draft.merchant.trim(), date: draft.date, currency: draft.currency.toUpperCase(), subtotal: Number(draft.subtotal || 0), tax: Number(draft.tax || 0), total, payment_method: draft.payment_method, category: chosenBox?.name ?? "Unfiled", box_id: chosenBox?.id ?? null, original_image_url: originalPath, confidence: draft.confidence, notes: draft.notes };
-      const items = draft.line_items.filter((item) => item.description.trim() || item.amount !== "").map((item) => ({ description: item.description.trim(), quantity: Number(item.quantity || 1), amount: Number(item.amount || 0), confidence: item.confidence }));
+      const totals = calculateReceiptTotals(draft); const chosenBox = boxes.find((box) => box.id === draft.box_id);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date) || !/^[A-Z]{3}$/.test(draft.currency.toUpperCase())) throw new Error("Check the receipt date and currency.");
+      const payload = { ...(editorReceiptId ? { id: editorReceiptId } : {}), merchant: draft.merchant.trim(), date: draft.date, currency: draft.currency.toUpperCase(), subtotal: totals.subtotal, tax: totals.tax, tax_enabled: draft.tax_enabled, tax_rate: draft.tax_enabled && draft.tax_mode === "percent" ? Number(draft.tax_input) : null, total: totals.total, payment_method: draft.payment_method, category: chosenBox?.name ?? "Unfiled", box_id: chosenBox?.id ?? null, original_image_url: originalPath, confidence: draft.confidence, notes: draft.notes };
+      const items = completedItems.map((item) => ({ description: item.description.trim(), quantity: Number(item.quantity), amount: Number(item.amount), confidence: item.confidence }));
       const { data: savedId, error } = await supabase.rpc("save_receipt_with_items", { p_receipt: payload, p_items: items });
       if (error) throw error;
       if (!savedId) throw new Error("The receipt was not saved. Please try again.");
       await loadAccount(); setModal(null); setFile(null); setFileUrl(""); setOriginalPath(null); setEditorReceiptId(null); setOcrState("idle"); notifySuccess(editorReceiptId ? "Receipt changes saved." : "Receipt tucked into your drawer.");
-    } catch (error) { notify(error instanceof Error ? error.message : "Couldn’t save this receipt."); }
+    } catch (error) { notifyError(error instanceof Error ? error.message : "Couldn’t save this receipt."); }
     finally { setSaving(false); }
   }
 
   async function deleteReceipt(receipt: Receipt) {
     if (!supabase || isDemo) return;
     const { error } = await supabase.from("receipts").delete().eq("id", receipt.id);
-    if (error) { notify(error.message); return; }
+    if (error) { notifyError(error.message); return; }
     if (receipt.original_image_url) await supabase.storage.from("receipt-originals").remove([receipt.original_image_url]);
     setReceipts((prior) => prior.filter((item) => item.id !== receipt.id)); setSelectedReceipt(null); notifySuccess("Receipt removed.");
   }
@@ -268,7 +273,7 @@ export default function HomePage() {
     const payload = { user_id: (await supabase.auth.getUser()).data.user?.id, name, illustration: draftIllustration, color: draftColor, budget: draftBudget ? Number(draftBudget) : null, sort_order: draftOrder };
     const query = editingBox ? supabase.from("boxes").update(payload).eq("id", editingBox.id).select().single() : supabase.from("boxes").insert(payload).select().single();
     const { data, error } = await query;
-    if (error) { notify(error.message); return; }
+    if (error) { notifyError(error.message); return; }
     const reordered = [...boxes.filter((box) => box.id !== (editingBox?.id ?? (data as Box).id))];
     reordered.splice(Math.max(0, Math.min(draftOrder, reordered.length)), 0, data as Box);
     const savedOrder = reordered.map((box, index) => ({ ...box, sort_order: index }));
@@ -281,9 +286,9 @@ export default function HomePage() {
   async function deleteBox(box: Box) {
     if (!supabase || isDemo) return;
     const { error: unfileError } = await supabase.from("receipts").update({ box_id: null, category: "Unfiled" }).eq("box_id", box.id);
-    if (unfileError) { notify(unfileError.message); return; }
+    if (unfileError) { notifyError(unfileError.message); return; }
     const { error } = await supabase.from("boxes").delete().eq("id", box.id);
-    if (error) { notify(error.message); return; }
+    if (error) { notifyError(error.message); return; }
     setBoxes((prior) => prior.filter((item) => item.id !== box.id)); setReceipts((prior) => prior.map((receipt) => receipt.box_id === box.id ? { ...receipt, box_id: "", category: "Unfiled" } : receipt)); setModal(null); setEditingBox(null);
     if (selectedBox === box.id) setSelectedBox(boxes.find((item) => item.id !== box.id)?.id ?? ""); notifySuccess("Box removed.");
   }
@@ -292,7 +297,7 @@ export default function HomePage() {
     const destination = boxes.find((box) => box.id === boxId); if (!destination) return;
     if (isDemo || !supabase) { notify("This sample drawer is just for browsing."); return; }
     const { error } = await supabase.from("receipts").update({ box_id: destination.id, category: destination.name }).eq("id", receipt.id);
-    if (error) { notify(error.message); return; }
+    if (error) { notifyError(error.message); return; }
     setReceipts((prior) => prior.map((item) => item.id === receipt.id ? { ...item, box_id: destination.id, category: destination.name } : item));
     setSelectedReceipt((prior) => prior?.id === receipt.id ? { ...receipt, box_id: destination.id, category: destination.name } : prior); notify(`Moved to ${destination.name}.`);
   }
@@ -414,13 +419,13 @@ export default function HomePage() {
     <AnimatePresence>{modal&&<div className="modal-backdrop no-print" onMouseDown={(event)=>{if(event.target===event.currentTarget){setModal(null);setFile(null);}}}>
       <motion.section className="modal" initial={{opacity:0,y:20,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:10,scale:.98}} transition={{duration:.18}} role="dialog" aria-modal="true" aria-labelledby="modal-title">
         {modal==="box"&&<div className="modal-head"><div><h2 id="modal-title">Make a new box</h2><p>A home for one of your everyday things.</p></div><button className="close-btn" onClick={()=>setModal(null)} aria-label="Close"><X size={17}/></button></div>}
-        {modal==="scan"?<ReceiptEditor draft={draft} onChange={setDraft} onSubmit={saveReceipt} onChooseFile={()=>fileInput.current?.click()} onDropFile={(nextFile)=>void useFile(nextFile)} onManual={()=>setOcrState("ready")} onRetry={()=>void retryOCR()} onClose={()=>{setModal(null);setFile(null);setFileUrl("");}} boxes={boxes} ocrState={ocrState} ocrError={ocrError} fileName={file?.name ?? ""} fileUrl={fileUrl} saving={saving} editing={!!editorReceiptId}/>:<form onSubmit={saveBox}><div className="form-grid"><div className="field full"><label>What’s it for?</label><input value={draftBoxName} onChange={(e)=>setDraftBoxName(e.target.value)} placeholder="A little something…" required autoFocus/></div><div className="field"><label>Your little sticker</label><select value={draftIllustration} onChange={(e)=>setDraftIllustration(e.target.value)}>{["📦","🍅","☕","🍴","🚕","🌼","🧺","🪴","📚","🎟️"].map((emoji)=><option key={emoji}>{emoji}</option>)}</select></div><div className="field"><label>Box tint</label><select value={draftColor} onChange={(e)=>setDraftColor(e.target.value)}>{[["cream","Warm paper"],["sage","Quiet sage"],["pink","Dusty rose"],["blue","Soft blue"],["yellow","Honey" ]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div><div className="field"><label>Monthly budget · IDR</label><input type="number" min="0" value={draftBudget} onChange={(e)=>setDraftBudget(e.target.value)} placeholder="No budget needed"/></div><div className="field"><label>Place in the drawer</label><select value={draftOrder} onChange={(e)=>setDraftOrder(Number(e.target.value))}>{Array.from({length:boxes.length+(editingBox?0:1)},(_,index)=><option key={index} value={index}>{index+1}{index===0?"st":index===1?"nd":index===2?"rd":"th"} in the drawer</option>)}</select></div></div><div className="modal-actions">{editingBox?<button type="button" className="secondary-btn" style={{color:"#9b7362"}} onClick={()=>setPendingDelete({kind:"box",box:editingBox})}><Trash2 size={14}/> Delete box</button>:<span/>}<button type="submit" className="primary-btn"><Check size={15}/> {editingBox?"Save changes":"Make my box"}</button></div></form>}
+        {modal==="scan"?<ReceiptEditor draft={draft} onChange={setDraft} onSubmit={saveReceipt} onChooseFile={()=>fileInput.current?.click()} onDropFile={(nextFile)=>void useFile(nextFile)} onManual={()=>{if(!draft.line_items.length)setDraft((prior)=>({...prior,line_items:[{id:crypto.randomUUID(),description:"",quantity:"1",amount:"",confidence:1}]}));setOcrState("ready");}} onRetry={()=>void retryOCR()} onClose={()=>{setModal(null);setFile(null);setFileUrl("");}} boxes={boxes} ocrState={ocrState} ocrError={ocrError} fileName={file?.name ?? ""} fileUrl={fileUrl} saving={saving} editing={!!editorReceiptId}/>:<form onSubmit={saveBox}><div className="form-grid"><div className="field full"><label>What’s it for?</label><input value={draftBoxName} onChange={(e)=>setDraftBoxName(e.target.value)} placeholder="A little something…" required autoFocus/></div><div className="field"><label>Your little sticker</label><select value={draftIllustration} onChange={(e)=>setDraftIllustration(e.target.value)}>{["📦","🍅","☕","🍴","🚕","🌼","🧺","🪴","📚","🎟️"].map((emoji)=><option key={emoji}>{emoji}</option>)}</select></div><div className="field"><label>Box tint</label><select value={draftColor} onChange={(e)=>setDraftColor(e.target.value)}>{[["cream","Warm paper"],["sage","Quiet sage"],["pink","Dusty rose"],["blue","Soft blue"],["yellow","Honey" ]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div><div className="field"><label>Monthly budget · IDR</label><input type="number" min="0" value={draftBudget} onChange={(e)=>setDraftBudget(e.target.value)} placeholder="No budget needed"/></div><div className="field"><label>Place in the drawer</label><select value={draftOrder} onChange={(e)=>setDraftOrder(Number(e.target.value))}>{Array.from({length:boxes.length+(editingBox?0:1)},(_,index)=><option key={index} value={index}>{index+1}{index===0?"st":index===1?"nd":index===2?"rd":"th"} in the drawer</option>)}</select></div></div><div className="modal-actions">{editingBox?<button type="button" className="secondary-btn" style={{color:"#9b7362"}} onClick={()=>setPendingDelete({kind:"box",box:editingBox})}><Trash2 size={14}/> Delete box</button>:<span/>}<button type="submit" className="primary-btn"><Check size={15}/> {editingBox?"Save changes":"Make my box"}</button></div></form>}
       </motion.section>
     </div>}</AnimatePresence>
 
     <AnimatePresence>{selectedReceipt&&<div className="modal-backdrop no-print" onMouseDown={(event)=>{if(event.target===event.currentTarget)setSelectedReceipt(null);}}><motion.section className="modal detail-modal" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} exit={{opacity:0,y:12}} role="dialog" aria-modal="true" aria-label={`${selectedReceipt.merchant} receipt`}>
       <div className="modal-head detail-modal-head"><button className="close-btn" onClick={()=>setSelectedReceipt(null)} aria-label="Close"><X size={17}/></button></div>
-      <div className="paper-slip"><div className="paper-head"><b>{selectedReceipt.merchant}</b><small>{new Date(`${selectedReceipt.date}T12:00:00`).toLocaleDateString("en",{day:"numeric",month:"long",year:"numeric"})} · {selectedReceipt.currency}</small></div><div className="paper-rule"/>{selectedReceipt.line_items.map((item)=><div className="paper-line" key={item.id}><span>{item.quantity.toString().padStart(2,"0")}</span><span>{item.description}</span><span>{formatMoney(item.amount, selectedReceipt.currency)}</span></div>)}<div className="paper-line"><span/><span>Subtotal</span><span>{formatMoney(selectedReceipt.subtotal, selectedReceipt.currency)}</span></div><div className="paper-line"><span/><span>Tax</span><span>{formatMoney(selectedReceipt.tax, selectedReceipt.currency)}</span></div><div className="paper-line" style={{border:0,color:"#85847b"}}><span/><span>Paid with {selectedReceipt.payment_method}</span><span/></div><div className="paper-total"><span>TOTAL</span><span>{formatMoney(selectedReceipt.total, selectedReceipt.currency)}</span></div><div className="barcode"/></div>
+      <div className="paper-slip"><div className="paper-head"><b>{selectedReceipt.merchant}</b><small>{new Date(`${selectedReceipt.date}T12:00:00`).toLocaleDateString("en",{day:"numeric",month:"long",year:"numeric"})} · {selectedReceipt.currency}</small></div><div className="paper-rule"/>{selectedReceipt.line_items.map((item)=><div className="paper-line" key={item.id}><span>{item.quantity.toString().padStart(2,"0")}</span><span>{item.description}</span><span>{formatMoney(item.amount * item.quantity, selectedReceipt.currency)}</span></div>)}<div className="paper-line"><span/><span>Subtotal</span><span>{formatMoney(selectedReceipt.subtotal, selectedReceipt.currency)}</span></div>{selectedReceipt.tax_enabled||selectedReceipt.tax>0?<div className="paper-line"><span/><span>Tax{selectedReceipt.tax_rate!=null?` · ${selectedReceipt.tax_rate}%`:""}</span><span>{formatMoney(selectedReceipt.tax, selectedReceipt.currency)}</span></div>:null}<div className="paper-line" style={{border:0,color:"#85847b"}}><span/><span>Paid with {selectedReceipt.payment_method}</span><span/></div><div className="paper-total"><span>TOTAL</span><span>{formatMoney(selectedReceipt.total, selectedReceipt.currency)}</span></div><div className="barcode"/></div>
       {selectedReceipt.notes&&<p style={{fontSize:12,color:"#7d7c74",margin:"0 4px 14px",textAlign:"center"}}>“{selectedReceipt.notes}”</p>}
       {!isDemo&&<div className="move-row"><label htmlFor="move-box">Tuck into</label><select id="move-box" value={selectedReceipt.box_id} onChange={(event)=>void moveReceipt(selectedReceipt,event.target.value)}>{boxes.map((box)=><option key={box.id} value={box.id}>{box.name}</option>)}</select></div>}
       {!isDemo&&<div className="modal-actions"><button className="secondary-btn" onClick={()=>setPendingDelete({kind:"receipt",receipt:selectedReceipt})}><Trash2 size={14}/> Delete</button><button className="primary-btn" onClick={()=>editReceipt(selectedReceipt)}><Pencil size={14}/> Edit receipt</button></div>}
@@ -431,7 +436,7 @@ export default function HomePage() {
       <div className="delete-confirm-icon"><Trash2 size={19}/></div><h2 id="delete-confirm-title">{pendingDelete.kind==="receipt"?"Delete this receipt?":"Delete this box?"}</h2><p id="delete-confirm-copy">{pendingDelete.kind==="receipt"?<>“{pendingDelete.receipt.merchant}” and its saved receipt details will be permanently removed.</>:<>“{pendingDelete.box.name}” will be removed. Receipts inside it will become unfiled.</>}</p>
       <div className="delete-confirm-actions"><button className="secondary-btn" onClick={()=>setPendingDelete(null)}>Cancel</button><button className="danger-btn" onClick={()=>{const target=pendingDelete;setPendingDelete(null);if(target.kind==="receipt")void deleteReceipt(target.receipt);else void deleteBox(target.box);}}>Delete {pendingDelete.kind}</button></div>
     </motion.section></div>}</AnimatePresence>
-    {toast&&<div className={`toast${toastKind==="success"?" toast-success":""}`} role="status">{toastKind==="success"&&<Check size={15} aria-hidden="true"/>}{toast}</div>}
+    {toast&&<div className={`toast toast-${toastKind}`} role={toastKind==="error"?"alert":"status"}>{toastKind==="success"?<Check size={15} aria-hidden="true"/>:toastKind==="error"?<CircleAlert size={15} aria-hidden="true"/>:<Info size={15} aria-hidden="true"/>}{toast}</div>}
   </main>;
 }
 
@@ -450,7 +455,7 @@ function ReceiptSlipList({receipts,onReceiptClick}:{receipts:Receipt[];onReceipt
 
   return <div className="receipt-slip-list">{orderedReceipts.map((receipt) => {
     const content = <><div className="paper-head"><b>{receipt.merchant}</b><small>{formatShortDate(receipt.date)} · {receipt.currency}</small></div><div className="paper-rule"/>
-      {receipt.line_items.map((item) => <div className="paper-line" key={item.id}><span>{item.quantity.toString().padStart(2,"0")}</span><span>{item.description}</span><span>{formatMoney(item.amount,receipt.currency)}</span></div>)}
+      {receipt.line_items.map((item) => <div className="paper-line" key={item.id}><span>{item.quantity.toString().padStart(2,"0")}</span><span>{item.description}</span><span>{formatMoney(item.amount * item.quantity,receipt.currency)}</span></div>)}
       {!receipt.line_items.length&&<div className="empty-note receipt-no-items">No line items on this receipt.</div>}
       <div className="paper-total"><span>TOTAL</span><span>{formatMoney(receipt.total,receipt.currency)}</span></div></>;
     return onReceiptClick

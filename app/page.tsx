@@ -446,7 +446,6 @@ function ReceiptSlipList({receipts,onReceiptClick}:{receipts:Receipt[];onReceipt
   })}</div>;
 }
 
-
 function EmptyState({kind,title,copy,className=""}:{kind:EmptyIllustrationKind;title:string;copy:string;className?:string}) {
   return <div className={`empty-state ${className}`}><EmptyStateIllustration kind={kind}/><h3>{title}</h3><p>{copy}</p></div>;
 }

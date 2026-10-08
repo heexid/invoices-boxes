@@ -142,6 +142,38 @@ body.printing-roll .box-receipt-slip{max-width:none;margin:0 auto 18px;box-shado
 .hero-caption .home-export-btn{width:100%}
 .profile-page{max-width:620px;margin:0 auto 36px}
 .profile-page .profile-navbar{width:calc(100% + 36px);min-height:58px;margin:0 -18px 18px;padding:0 18px;grid-template-columns:minmax(40px,1fr) minmax(0,2fr) minmax(40px,1fr)}
+.recent-page{max-width:620px;margin:0 auto 36px}
+.recent-page .recent-navbar{width:calc(100% + 36px);min-height:58px;margin:0 -18px 18px;padding:0 18px;grid-template-columns:minmax(40px,1fr) minmax(0,2fr) minmax(40px,1fr)}
+.recent-page-content{display:grid;gap:12px}
+.recent-page-controls,.recent-page-list{border:1px solid var(--line);border-radius:10px;background:#fffefa;padding:15px}
+.recent-results-count{margin:0 0 10px;color:#85847b;font-size:11px}
+.recent-search-field{height:40px;display:flex;align-items:center;gap:9px;padding:0 11px;border:1px solid var(--line);border-radius:7px;color:#929188;background:#fffefa}
+.recent-search-field input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font-size:12px}
+.recent-search-field input::placeholder{color:#9b9a92}
+.recent-search-field button{width:24px;height:24px;flex:none;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:#77766f}
+.recent-search-field button[hidden]{display:none}
+.recent-date-filters{display:flex;gap:8px;margin-top:9px}
+.recent-date-filters .box-month-filter,.recent-date-filters .box-year-filter{flex:1;min-width:0}
+.recent-date-filters .box-month-filter select,.recent-date-filters .box-year-filter select{width:100%;height:38px;font-size:12px}
+.recent-date-filters .box-month-filter select{padding-right:28px}
+.recent-page-list{padding:0 15px}
+.recent-page-list .receipt-row{grid-template-columns:43px minmax(0,1fr) auto;gap:10px;padding:13px 0}
+.recent-page-list .merchant-name{font-size:13px}
+.recent-page-list .merchant-meta{font-size:11px}
+.recent-no-results{text-align:center;padding:12px 0 18px}
+.recent-no-results .recent-empty-state{min-height:170px}
+.recent-no-results>.subtle-link{margin-top:5px}
+.recent-page .recent-empty-state{min-height:210px}
+.boxes-page{max-width:620px;margin:0 auto 36px}
+.boxes-page .boxes-navbar{width:calc(100% + 36px);min-height:58px;margin:0 -18px 18px;padding:0 18px;grid-template-columns:minmax(40px,1fr) minmax(0,2fr) minmax(40px,1fr)}
+.boxes-page-count{margin:0 0 12px;color:#85847b;font-size:11px}
+.all-boxes-grid{padding-bottom:16px}
+.box-info{z-index:2;left:12px;bottom:11px;max-width:calc(100% - 24px);width:max-content;padding:6px 8px;border:1px solid #5e493122;border-radius:5px;background:rgba(255,250,239,.96);box-shadow:0 2px 7px #33271d20;color:#30261e;font-size:10px;letter-spacing:.35px}
+.box-info .box-info-name{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;font-weight:700;color:#30261e}
+.box-info strong{margin:2px 0;font-size:13px;line-height:1.2;font-weight:700;color:#29221c;letter-spacing:-.15px}
+.box-info .box-info-count{display:block;font-size:9px;line-height:1.2;font-weight:600;color:#65513f}
+@media(max-width:350px){.box-info{left:9px;bottom:9px;padding:5px 6px}.box-info strong{font-size:11px}}
+@media(max-width:360px){.recent-page-controls,.recent-page-list{padding-left:11px;padding-right:11px}.recent-date-filters{gap:6px}}
 .box-receipts-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 16px}
 .box-receipts-heading h2{margin:0;font-size:19px;line-height:1.2;letter-spacing:-.5px;text-transform:none}
 .box-receipts-heading p{margin:4px 0 0;color:#8b8981;font-size:11px}
@@ -153,3 +185,23 @@ body.printing-roll .box-receipt-slip{max-width:none;margin:0 auto 18px;box-shado
 .box-month-filter svg{position:absolute;right:8px;pointer-events:none;color:#77766f}
 .box-receipts-heading .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:370px){.box-receipts-heading{align-items:flex-start;flex-direction:column}.box-receipt-filters{width:100%}.box-year-filter select,.box-month-filter{flex:1}.box-month-filter select{width:100%}}
+
+/* Full-width label strips keep box summaries readable across card and detail views. */
+.box-card .box-info{left:10px;right:10px;bottom:10px;width:auto;max-width:none;padding:8px 10px;}
+.box-card .box-info-name{max-width:100%;}
+.box-card .box-info strong{display:block;max-width:100%;overflow-wrap:anywhere;}
+.box-detail-scene .detail-stamp{left:0;right:0;bottom:0;width:auto;padding:9px 12px;background:rgba(255,250,239,.96);border:1px solid #5e493122;border-radius:5px;box-shadow:0 2px 7px #33271d20;color:#30261e;z-index:3;overflow:hidden;}
+.box-detail-scene .detail-stamp strong{max-width:100%;overflow-wrap:anywhere;color:#29221c;}
+.box-detail-scene .detail-stamp small{display:block;color:#65513f;}
+.drawer-sticky-header{width:calc(100% + 36px);margin-left:-18px;margin-right:-18px;padding:0 18px;}
+.box-scene .box-stamp{left:0;right:0;bottom:0;width:auto;padding:8px 12px;background:rgba(255,250,239,.96);border:1px solid #5e493122;border-radius:5px;box-shadow:0 2px 7px #33271d20;color:#30261e;z-index:3;overflow:hidden;}
+.box-scene .box-stamp strong{max-width:100%;overflow-wrap:anywhere;color:#29221c;}
+/* Use type scale and tone for hierarchy instead of heavy weights. */
+.box-info .box-info-name{font-size:11px;font-weight:500;color:#4d4034;letter-spacing:.45px;}
+.box-info strong{display:block;margin:3px 0;font-size:15px;line-height:1.25;font-weight:500;color:#29221c;letter-spacing:0;overflow-wrap:anywhere;}
+.box-info .box-info-count{font-size:9px;line-height:1.2;font-weight:400;color:#81786e;letter-spacing:.15px;}
+.box-scene .box-stamp{font-size:11px;font-weight:500;letter-spacing:.8px;color:#65513f;}
+.box-scene .box-stamp strong{display:block;margin-top:4px;font-size:17px;line-height:1.25;font-weight:500;letter-spacing:0;}
+.box-detail-scene .detail-stamp{font-size:12px;font-weight:500;letter-spacing:.8px;color:#4d4034;}
+.box-detail-scene .detail-stamp strong{display:block;margin:5px 0;font-size:19px;line-height:1.25;font-weight:500;letter-spacing:0;}
+.box-detail-scene .detail-stamp small{font-size:10px;line-height:1.2;font-weight:400;letter-spacing:.2px;color:#81786e;}

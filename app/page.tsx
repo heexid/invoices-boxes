@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowDownToLine, ArrowLeft, ArrowRight, Box as BoxIcon, Check, ChevronDown, ChevronLeft, ChevronRight, FileImage, FileText, LogIn, LogOut, MoreVertical, Pencil, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { ArrowDownToLine, ArrowLeft, ArrowRight, Box as BoxIcon, Check, ChevronDown, ChevronLeft, ChevronRight, FileImage, FileText, LogIn, LogOut, MoreVertical, Pencil, Plus, Search, Sparkles, Trash2, UserRound, X } from "lucide-react";
 import { demoBoxes, demoReceipts, formatDay, formatIDR, formatMoney, formatShortDate, formatTotals } from "@/lib/data";
 import { getSupabase } from "@/lib/supabase";
 import { ReceiptEditor } from "@/components/receipt-editor";
@@ -10,11 +10,16 @@ import { EmptyStateIllustration, type EmptyIllustrationKind } from "@/components
 import { blankReceiptDraft, extractionToDraft, receiptToDraft } from "@/lib/receipt-draft";
 import type { Box, ExtractedReceiptDraft, Receipt, ReceiptDraft } from "@/lib/types";
 
-type Screen = "drawer" | "box" | "print-preview" | "receipt" | "profile" | "auth";
+type Screen = "drawer" | "boxes" | "box" | "print-preview" | "recent" | "receipt" | "profile" | "auth";
 type AuthMode = "signin" | "signup" | "reset" | "update-password";
 type OCRState = "idle" | "uploading" | "extracting" | "ready" | "error";
 const emailName = (email: string | undefined) => email?.split("@")[0]?.split(/[._+-]+/).filter(Boolean)[0] ?? "";
 const monthName = (month: string) => new Date(`${month}-15T12:00:00`).toLocaleDateString("en", { month: "long", year: "numeric" });
+const addedAtDate = (receipt: Receipt) => {
+  const date = receipt.created_at ? new Date(receipt.created_at) : new Date(`${receipt.date}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? new Date(`${receipt.date}T12:00:00`) : date;
+};
+const dateMonthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
 export default function HomePage() {
   const [screen, setScreen] = useState<Screen>("drawer");
@@ -31,7 +36,9 @@ export default function HomePage() {
   });
   const [boxReceiptYear, setBoxReceiptYear] = useState("all");
   const [boxReceiptMonth, setBoxReceiptMonth] = useState("all");
-  const [showAllBoxes, setShowAllBoxes] = useState(false);
+  const [recentQuery, setRecentQuery] = useState("");
+  const [recentYear, setRecentYear] = useState("all");
+  const [recentMonth, setRecentMonth] = useState("all");
   const [boxMenuOpen, setBoxMenuOpen] = useState(false);
   const [modal, setModal] = useState<"scan" | "box" | null>(null);
   const [editingBox, setEditingBox] = useState<Box | null>(null);
@@ -105,9 +112,20 @@ export default function HomePage() {
   }, [showOriginal, selectedReceipt, supabase, isDemo]);
 
   const monthReceipts = useMemo(() => receipts.filter((receipt) => receipt.date.slice(0, 7) === month), [receipts, month]);
-  const recentReceipts = useMemo(() => [...receipts]
-    .sort((a, b) => new Date(b.created_at ?? `${b.date}T12:00:00`).getTime() - new Date(a.created_at ?? `${a.date}T12:00:00`).getTime())
-    .slice(0, 5), [receipts]);
+  const sortedRecentReceipts = useMemo(() => [...receipts]
+    .sort((a, b) => addedAtDate(b).getTime() - addedAtDate(a).getTime()), [receipts]);
+  const recentReceipts = sortedRecentReceipts.slice(0, 5);
+  const recentYears = [...new Set(sortedRecentReceipts.map((receipt) => String(addedAtDate(receipt).getFullYear())))].sort((a, b) => b.localeCompare(a));
+  const recentMonths = [...new Set(sortedRecentReceipts.filter((receipt) => recentYear === "all" || String(addedAtDate(receipt).getFullYear()) === recentYear).map((receipt) => dateMonthKey(addedAtDate(receipt))))].sort((a, b) => b.localeCompare(a));
+  const visibleRecentReceipts = sortedRecentReceipts.filter((receipt) => {
+    const added = addedAtDate(receipt);
+    const addedMonth = dateMonthKey(added);
+    const yearMatches = recentYear === "all" || String(added.getFullYear()) === recentYear;
+    const monthMatches = recentMonth === "all" || addedMonth === recentMonth;
+    const boxName = boxes.find((box) => box.id === receipt.box_id)?.name ?? "Unfiled";
+    const searchable = [receipt.merchant, boxName, receipt.notes, receipt.payment_method, receipt.category, receipt.currency, receipt.date, added.toLocaleDateString(), addedMonth, receipt.subtotal, receipt.tax, receipt.total, formatMoney(receipt.subtotal, receipt.currency), formatMoney(receipt.tax, receipt.currency), formatMoney(receipt.total, receipt.currency), ...receipt.line_items.map((item) => item.description), ...receipt.line_items.map((item) => item.quantity), ...receipt.line_items.map((item) => item.amount)].join(" ").toLocaleLowerCase();
+    return yearMatches && monthMatches && searchable.includes(recentQuery.trim().toLocaleLowerCase());
+  });
   const activeBox = boxes.find((box) => box.id === selectedBox) ?? boxes[0];
   useEffect(() => { setBoxReceiptYear("all"); setBoxReceiptMonth("all"); }, [activeBox?.id]);
   const boxReceipts = monthReceipts.filter((receipt) => receipt.box_id === activeBox?.id);
@@ -119,6 +137,7 @@ export default function HomePage() {
 
   const openAuth = (mode: AuthMode = "signin") => { setAuthMode(mode); setScreen("auth"); setModal(null); };
   const leaveAuth = () => setScreen("drawer");
+  function openRecentReceipts() { setRecentQuery(""); setRecentYear("all"); setRecentMonth("all"); setScreen("recent"); }
 
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -291,6 +310,15 @@ export default function HomePage() {
   function openProfile() { setSelectedReceipt(null); setScreen("profile"); }
   function openBoxEditor(box?: Box) { setEditingBox(box ?? null); setDraftBoxName(box?.name ?? ""); setDraftBudget(box?.budget ? String(box.budget) : ""); setDraftIllustration(box?.illustration && box.illustration.length <= 4 ? box.illustration : (box?.illustration === "tomato" ? "🍅" : box?.illustration === "cup" ? "☕" : box?.illustration === "fork" ? "🍴" : box?.illustration === "car" ? "🚕" : box?.illustration === "flower" ? "🌼" : "📦")); setDraftColor(box?.color ?? "cream"); setDraftOrder(box ? Math.max(0, boxes.findIndex((item)=>item.id===box.id)) : boxes.length); setModal("box"); }
 
+  function renderBoxCard(box: Box, index: number) {
+    const contents = monthReceipts.filter((receipt) => receipt.box_id === box.id);
+    return <motion.button key={box.id} className="box-card" data-tone={box.color || ["sage","cream","pink","blue","yellow"][index%5]} onClick={()=>{setSelectedBox(box.id);setScreen("box");setSelectedReceipt(null);}} onDragOver={(event)=>event.preventDefault()} onDrop={(event)=>{event.preventDefault();const receipt=receipts.find((item)=>item.id===event.dataTransfer.getData("text/plain"));if(receipt)void moveReceipt(receipt,box.id);}} whileTap={{scale:.985}} aria-label={`${box.name} box, ${formatTotals(contents)}`}>
+      {contents.slice(0,2).map((receipt,i)=><div className={`mini-slip ${i===0?"a":"b"}`} key={receipt.id}><b>{receipt.merchant}</b><span>{formatDay(receipt.date)} AUG</span><b style={{marginTop:5}}>{formatMoney(receipt.total, receipt.currency)}</b><i/></div>)}
+      <span className="box-object">{box.illustration==="tomato"?"🍅":box.illustration==="cup"?"☕":box.illustration==="fork"?"🍴":box.illustration==="car"?"🚕":box.illustration==="flower"?"🌼":box.illustration||"📦"}</span>
+      <span className="box-info"><span className="box-info-name">{box.name}</span><strong>{formatTotals(contents)}</strong><span className="box-info-count">×{contents.length}</span></span>
+    </motion.button>;
+  }
+
   if (screen === "auth") return <AuthScreen mode={authMode} setMode={setAuthMode} busy={authBusy} configured={!!supabase} onSubmit={handleAuth} onBack={leaveAuth} notice={authNotice} error={authError} />;
 
   return <main className="app-shell">
@@ -304,7 +332,27 @@ export default function HomePage() {
       <button className="primary-btn desktop-add-receipt" onClick={openScan}><Plus size={16}/> Add receipt</button>
     </section></div>}
 
-    {screen === "profile" ? <section className="profile-page">
+    {screen === "boxes" ? <section className="boxes-page">
+      <nav className="detail-navbar boxes-navbar"><button className="detail-nav-back" onClick={() => setScreen("drawer")} aria-label="Back to the drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title">Boxes</h1><div className="detail-nav-actions"><button className="detail-nav-menu" onClick={()=>isDemo?openAuth("signup"):openBoxEditor()} aria-label="Add a box" title="Add a box"><Plus size={21}/></button></div></nav>
+      <div className="boxes-page-content"><p className="boxes-page-count">{boxes.length} {boxes.length===1?"box":"boxes"}</p><div className="box-grid all-boxes-grid">{boxes.length ? boxes.map(renderBoxCard) : <EmptyState kind="boxes" title="Your boxes are waiting" copy="Give your receipts a place to land by creating your first box." className="boxes-empty-state"/>}</div></div>
+    </section> : screen === "recent" ? <section className="recent-page">
+      <nav className="detail-navbar recent-navbar"><button className="detail-nav-back" onClick={() => setScreen("drawer")} aria-label="Back to the drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title">Recently added</h1><span aria-hidden="true"/></nav>
+      <div className="recent-page-content">
+        <div className="recent-page-controls">
+          <p className="recent-results-count">{visibleRecentReceipts.length} {visibleRecentReceipts.length === 1 ? "receipt" : "receipts"}</p>
+          <label className="recent-search-field"><Search size={16}/><span className="sr-only">Search receipts</span><input type="search" value={recentQuery} onChange={(event)=>setRecentQuery(event.target.value)} placeholder="Search receipts, items, amounts…"/><button type="button" onClick={()=>setRecentQuery("")} aria-label="Clear search" hidden={!recentQuery}><X size={15}/></button></label>
+          <div className="recent-date-filters">
+            <label className="box-month-filter"><span className="sr-only">Filter by month added</span><select aria-label="Filter receipts by added month" value={recentMonth} onChange={(event)=>setRecentMonth(event.target.value)}><option value="all">All months</option>{recentMonths.map((value)=><option key={value} value={value}>{new Date(`${value}-15T12:00:00`).toLocaleDateString("en",{month:"long"})}</option>)}</select><ChevronDown size={14}/></label>
+            <label className="box-year-filter"><span className="sr-only">Filter by year added</span><select aria-label="Filter receipts by added year" value={recentYear} onChange={(event)=>{setRecentYear(event.target.value);setRecentMonth("all");}}><option value="all">All years</option>{recentYears.map((year)=><option key={year} value={year}>{year}</option>)}</select></label>
+          </div>
+        </div>
+        <div className="recent-page-list">
+          {visibleRecentReceipts.length ? visibleRecentReceipts.map((receipt)=>{const added=addedAtDate(receipt);return <div key={receipt.id} className="receipt-row" onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}} role="button" tabIndex={0} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedReceipt(receipt);setShowOriginal(false);}}}>
+            <span className="date-chip"><small>{added.toLocaleDateString("en",{month:"short"})}</small>{String(added.getDate()).padStart(2,"0")}</span><span style={{minWidth:0}}><span className="merchant-name" style={{display:"block"}}>{receipt.merchant}</span><span className="merchant-meta">{boxes.find((box)=>box.id===receipt.box_id)?.name??"Unfiled"}</span></span><span className="receipt-amount">{formatMoney(receipt.total, receipt.currency)}</span>
+          </div>;}):receipts.length?<div className="recent-no-results"><EmptyState kind="receipts" title="No receipts match" copy="Try another search or change the date filters." className="recent-empty-state"/><button className="subtle-link" onClick={()=>{setRecentQuery("");setRecentYear("all");setRecentMonth("all");}}>Clear search and filters</button></div>:<EmptyState kind="receipts" title="No receipts yet" copy="Your new receipts will appear here after you add one." className="recent-empty-state"/>}
+        </div>
+      </div>
+    </section> : screen === "profile" ? <section className="profile-page">
       <nav className="detail-navbar profile-navbar"><button className="detail-nav-back" onClick={() => setScreen("drawer")} aria-label="Back to the drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title">Profile</h1><span aria-hidden="true"/></nav>
       <div className="profile-card">
         <div className="profile-avatar">{emailName(userEmail) ? emailName(userEmail).slice(0, 3).toUpperCase() : "A"}</div>
@@ -330,23 +378,17 @@ export default function HomePage() {
         </div>
         <div className="hero-caption"><button className="box-export-btn home-export-btn" onClick={exportCSV}><ArrowDownToLine size={15}/> Export drawer</button></div>
 
-        <div className="section-title"><h2>the boxes</h2><div className="box-section-actions">{boxes.length > 4&&<button className="subtle-link" onClick={()=>setShowAllBoxes((shown)=>!shown)}>{showAllBoxes?"Show four":"See all boxes"}</button>}<button onClick={() => isDemo ? openAuth("signup") : openBoxEditor()}><Plus size={14} style={{verticalAlign:"-3px",marginRight:3}}/> Add a box</button></div></div>
+        <div className="section-title"><h2>The boxes</h2><div className="box-section-actions"><button className="subtle-link" onClick={()=>{setSelectedReceipt(null);setScreen("boxes");}}>See All</button></div></div>
         <div className="box-grid">
-          {boxes.length ? (showAllBoxes ? boxes : boxes.slice(0, 4)).map((box,index)=><motion.button key={box.id} className="box-card" data-tone={box.color || ["sage","cream","pink","blue","yellow"][index%5]} onClick={()=>{setSelectedBox(box.id);setScreen("box");setSelectedReceipt(null);}} onDragOver={(event)=>event.preventDefault()} onDrop={(event)=>{event.preventDefault();const receipt=receipts.find(item=>item.id===event.dataTransfer.getData("text/plain"));if(receipt)void moveReceipt(receipt,box.id);}} whileTap={{scale:.985}} aria-label={`${box.name} box, ${formatTotals(monthReceipts.filter(item=>item.box_id===box.id))}`}>
-            {monthReceipts.filter(item=>item.box_id===box.id).slice(0,2).map((receipt,i)=><div className={`mini-slip ${i===0?"a":"b"}`} key={receipt.id}><b>{receipt.merchant}</b><span>{formatDay(receipt.date)} AUG</span><b style={{marginTop:5}}>{formatMoney(receipt.total, receipt.currency)}</b><i/></div>)}
-            <span className="box-object">{box.illustration==="tomato"?"🍅":box.illustration==="cup"?"☕":box.illustration==="fork"?"🍴":box.illustration==="car"?"🚕":box.illustration==="flower"?"🌼":box.illustration||"📦"}</span>
-            <span className="box-info">{box.name}<strong>{formatTotals(monthReceipts.filter(item=>item.box_id===box.id))}</strong><span>×{monthReceipts.filter(item=>item.box_id===box.id).length}</span></span>
-            {box.budget&&<span className="box-budget"><i style={{width:`${Math.min(100,Math.round(monthReceipts.filter(item=>item.box_id===box.id).reduce((sum,item)=>sum+item.total,0)/box.budget*100))}%`}}/></span>}
-            {!isDemo&&<span className="box-edit" onClick={(event)=>{event.stopPropagation();openBoxEditor(box);}} aria-label={`Edit ${box.name}`}><Pencil size={12}/></span>}
-          </motion.button>) : <EmptyState kind="boxes" title="Your boxes are waiting" copy="Give your receipts a place to land by creating your first box." className="boxes-empty-state"/>}
+          {boxes.length ? boxes.slice(0, 4).map(renderBoxCard) : <EmptyState kind="boxes" title="Your boxes are waiting" copy="Give your receipts a place to land by creating your first box." className="boxes-empty-state"/>}
         </div>
       </section>
 
       <aside className="right-panel no-print">
         <div className="panel-card">
-          <div className="panel-heading"><h2>recently added</h2><button className="icon-btn" aria-label="Export this month as CSV" title="Export this month as CSV" onClick={exportCSV}><ArrowDownToLine size={17}/></button></div>
+          <div className="panel-heading"><h2>Recently added</h2><button className="subtle-link recent-see-all" onClick={openRecentReceipts}>See all</button></div>
           <div className="receipt-list">
-            {recentReceipts.length ? recentReceipts.map((receipt)=><div key={receipt.id} className="receipt-row" draggable={!isDemo} onDragStart={(event)=>event.dataTransfer.setData("text/plain",receipt.id)} onClick={()=>{setSelectedReceipt(receipt);setScreen("receipt");setShowOriginal(false);}} role="button" tabIndex={0} onKeyDown={(event)=>{if(event.key==="Enter"){setSelectedReceipt(receipt);setScreen("receipt");}}}>
+            {recentReceipts.length ? recentReceipts.map((receipt)=><div key={receipt.id} className="receipt-row" draggable={!isDemo} onDragStart={(event)=>event.dataTransfer.setData("text/plain",receipt.id)} onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}} role="button" tabIndex={0} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedReceipt(receipt);setShowOriginal(false);}}}>
               <span className="date-chip"><small>{new Date(`${receipt.date}T12:00:00`).toLocaleDateString("en",{month:"short"})}</small>{formatDay(receipt.date)}</span><span style={{minWidth:0}}><span className="merchant-name" style={{display:"block"}}>{receipt.merchant}</span><span className="merchant-meta">{boxes.find((box)=>box.id===receipt.box_id)?.name??"Unfiled"}</span></span><span className="receipt-amount">{formatMoney(receipt.total, receipt.currency)}</span>
             </div>):<EmptyState kind="receipts" title="No receipts yet" copy="Your newest receipts will show up here after you add one." className="recent-empty-state"/>}
           </div>

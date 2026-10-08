@@ -33,12 +33,13 @@ Use brown gradients and inset shadows for cardboard scenes, pale green gingham a
 - Use DM Sans for interface text and friendly, clear headings.
 - Use DM Mono for dates, amounts, line items, receipt metadata, and box totals.
 - Keep receipt data compact and legible. Use uppercase merchant names on printed-style slips; use normal title casing for interface headings.
+- For box summaries, establish hierarchy with size, spacing, and color rather than bold weight: medium-weight merchant label, largest/darkest medium-weight total, and smaller regular-weight muted receipt count. Apply this consistently to the drawer month stamp, box cards, and box-detail scene.
 - Use sentence case for controls and short, warm microcopy.
 
 ## Components and materials
 
 - **Receipt slips:** Warm-white paper with zigzag edges, dashed rules, monospace content, clear totals, and a barcode accent. Each receipt remains its own slip and shows its own items and total.
-- **Boxes:** Cardboard-like cards with an inset frame, optional small object illustration, a few receipt previews, name, total, and receipt count.
+- **Boxes:** Cardboard-like cards with an inset frame, optional small object illustration, a few receipt previews, and a full-width warm-paper summary strip inset from the frame. Keep the name, total, and count readable; long totals may wrap without clipping.
 - **Drawer scene:** Gingham surface behind an open cardboard box with a small set of receipt slips and a month total.
 - **Controls:** Rounded, quiet controls with a visible focus ring. Primary actions use green fill; secondary/export actions use a thin neutral outline and white paper surface.
 - **Empty states:** Inline illustrations in the same paper/cardboard style, a short heading and helper sentence, and no extra actions beyond the section’s existing create controls.

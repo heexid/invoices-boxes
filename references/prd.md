@@ -36,14 +36,16 @@ People who want a lightweight record of everyday purchases need to save receipts
 
 - Default the month and year to the current local month; allow month navigation across year boundaries.
 - Show the selected month’s receipt count and IDR/mixed-currency total without converting currencies.
-- Show four boxes initially and allow expanding to all boxes.
+- Show four box cards initially and link to a dedicated page listing every box.
 - Show at most five recently created receipts, using creation time for signed-in data and receipt date for sample data.
+- Keep the homepage header full-width across the centered phone-width canvas; open receipt details as an overlay so closing one returns to the same drawer view.
 - Provide CSV export for the current drawer month. Do not show homepage search, box filter, or PDF controls.
 - Provide empty states for boxes and recent receipts when those sections have no content.
 
 ### Boxes and box details
 
 - Create, rename, reorder, and delete boxes. Box data includes name, illustration, tint, optional monthly IDR budget, sort order, and creation time.
+- Show the box name, total, and receipt count in a full-width warm-paper summary strip. Use type size and color for hierarchy rather than bold weights: total is largest/darkest, merchant/name is medium-weight context, and count is smaller/muted.
 - Allow receipts to be filed into or moved between boxes.
 - Show box receipts as independent slips with their line items and individual total; do not nest a receipt inside an aggregate receipt.
 - Provide month and year filters for box receipts, defaulted to all months and all years, and display the matching receipt count.

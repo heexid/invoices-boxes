@@ -5,7 +5,9 @@
 - The original brief proposed a responsive desktop dashboard. Later product direction chose the mobile layout at every viewport size: center the app in a canvas capped at 480px, with no separate desktop layout.
 - The homepage opens on the current local month and year. The sample data remains dated August 2026, so other months may show zero sample receipts.
 - Sample mode is read-only and does not require Supabase configuration. It contains 13 IDR receipts in five boxes. A signed-in account loads only its own data and starts empty when it has none.
-- The homepage shows four boxes initially, can expand to all boxes, and lists up to five recently added receipts. The homepage has no search/filter or PDF control; CSV export is available.
+- The homepage shows four boxes initially with a See All link to the dedicated all-boxes page, and lists up to five recently added receipts with a See All link to the searchable/filterable recent-receipts page. The homepage has no search/filter or PDF control; CSV export is available.
+- The drawer header spans the centered canvas while its controls align with the content inset. Homepage receipt details open as an overlay without changing the active drawer screen.
+- The drawer month stamp, box-card summaries, and box-detail summary use matching full-width warm-paper strips. Summary hierarchy comes from size and tone, not bold weight: total is largest/darkest, name is medium-weight, and count is smaller/muted.
 - Box details show a cardboard box scene, CSV export, receipt count, and independent receipt slips. Month/year filters start at “All months” and “All Years.” Print preview is single-column.
 - The profile is reached from the drawer header. The box detail header has a back icon, truncated title, and overflow menu. The receipt action stays available as a floating button.
 - Preserve the selected box across account reloads when that box still exists; saving a receipt should not move the user to another box detail page.

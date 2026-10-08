@@ -62,12 +62,21 @@ export default function HomePage() {
   const [authBusy, setAuthBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
+  const [toastKind, setToastKind] = useState<"info" | "success">("info");
+  const toastTimer = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const supabase = useMemo(() => getSupabase(), []);
 
   useEffect(() => () => { if (fileUrl) URL.revokeObjectURL(fileUrl); }, [fileUrl]);
 
-  const notify = useCallback((message: string) => { setToast(message); window.setTimeout(() => setToast(""), 2800); }, []);
+  const showToast = useCallback((message: string, kind: "info" | "success") => {
+    setToast(message); setToastKind(kind);
+    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(""), 2800);
+  }, []);
+  const notify = useCallback((message: string) => showToast(message, "info"), [showToast]);
+  const notifySuccess = useCallback((message: string) => showToast(message, "success"), [showToast]);
+  useEffect(() => () => { if (toastTimer.current !== null) window.clearTimeout(toastTimer.current); }, []);
 
   const loadAccount = useCallback(async () => {
     if (!supabase) return;
@@ -240,7 +249,7 @@ export default function HomePage() {
       const { data: savedId, error } = await supabase.rpc("save_receipt_with_items", { p_receipt: payload, p_items: items });
       if (error) throw error;
       if (!savedId) throw new Error("The receipt was not saved. Please try again.");
-      await loadAccount(); setModal(null); setFile(null); setFileUrl(""); setOriginalPath(null); setEditorReceiptId(null); setOcrState("idle"); notify(editorReceiptId ? "Receipt changes saved." : "Receipt tucked into your drawer.");
+      await loadAccount(); setModal(null); setFile(null); setFileUrl(""); setOriginalPath(null); setEditorReceiptId(null); setOcrState("idle"); notifySuccess(editorReceiptId ? "Receipt changes saved." : "Receipt tucked into your drawer.");
     } catch (error) { notify(error instanceof Error ? error.message : "Couldn’t save this receipt."); }
     finally { setSaving(false); }
   }
@@ -250,7 +259,7 @@ export default function HomePage() {
     const { error } = await supabase.from("receipts").delete().eq("id", receipt.id);
     if (error) { notify(error.message); return; }
     if (receipt.original_image_url) await supabase.storage.from("receipt-originals").remove([receipt.original_image_url]);
-    setReceipts((prior) => prior.filter((item) => item.id !== receipt.id)); setSelectedReceipt(null); notify("Receipt removed.");
+    setReceipts((prior) => prior.filter((item) => item.id !== receipt.id)); setSelectedReceipt(null); notifySuccess("Receipt removed.");
   }
 
   async function saveBox(event: FormEvent<HTMLFormElement>) {
@@ -266,7 +275,7 @@ export default function HomePage() {
     await Promise.all(savedOrder.map((box) => supabase.from("boxes").update({ sort_order: box.sort_order }).eq("id", box.id)));
     setBoxes(savedOrder);
     if (!editingBox) setSelectedBox((data as Box).id);
-    setModal(null); setEditingBox(null); notify(editingBox ? "Box updated." : "A new little box, ready for receipts.");
+    setModal(null); setEditingBox(null); notifySuccess(editingBox ? "Box updated." : "A new little box, ready for receipts.");
   }
 
   async function deleteBox(box: Box) {
@@ -276,7 +285,7 @@ export default function HomePage() {
     const { error } = await supabase.from("boxes").delete().eq("id", box.id);
     if (error) { notify(error.message); return; }
     setBoxes((prior) => prior.filter((item) => item.id !== box.id)); setReceipts((prior) => prior.map((receipt) => receipt.box_id === box.id ? { ...receipt, box_id: "", category: "Unfiled" } : receipt)); setModal(null); setEditingBox(null);
-    if (selectedBox === box.id) setSelectedBox(boxes.find((item) => item.id !== box.id)?.id ?? ""); notify("Box removed.");
+    if (selectedBox === box.id) setSelectedBox(boxes.find((item) => item.id !== box.id)?.id ?? ""); notifySuccess("Box removed.");
   }
 
   async function moveReceipt(receipt: Receipt, boxId: string) {
@@ -422,7 +431,7 @@ export default function HomePage() {
       <div className="delete-confirm-icon"><Trash2 size={19}/></div><h2 id="delete-confirm-title">{pendingDelete.kind==="receipt"?"Delete this receipt?":"Delete this box?"}</h2><p id="delete-confirm-copy">{pendingDelete.kind==="receipt"?<>“{pendingDelete.receipt.merchant}” and its saved receipt details will be permanently removed.</>:<>“{pendingDelete.box.name}” will be removed. Receipts inside it will become unfiled.</>}</p>
       <div className="delete-confirm-actions"><button className="secondary-btn" onClick={()=>setPendingDelete(null)}>Cancel</button><button className="danger-btn" onClick={()=>{const target=pendingDelete;setPendingDelete(null);if(target.kind==="receipt")void deleteReceipt(target.receipt);else void deleteBox(target.box);}}>Delete {pendingDelete.kind}</button></div>
     </motion.section></div>}</AnimatePresence>
-    {toast&&<div className="toast" role="status">{toast}</div>}
+    {toast&&<div className={`toast${toastKind==="success"?" toast-success":""}`} role="status">{toastKind==="success"&&<Check size={15} aria-hidden="true"/>}{toast}</div>}
   </main>;
 }
 

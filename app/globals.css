@@ -213,3 +213,4 @@ body.printing-roll .box-receipt-slip{max-width:none;margin:0 auto 18px;box-shado
 .delete-confirm-actions{display:flex;justify-content:flex-end;gap:9px;}
 .danger-btn{min-height:40px;display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border:0;border-radius:999px;background:#9b5d4b;color:#fff;font-weight:600;}
 .danger-btn:hover{background:#854c3d;}
+.toast-success{top:calc(env(safe-area-inset-top, 0px) + 16px);bottom:auto;display:flex;align-items:center;gap:8px;background:#416b57;color:#fff;}

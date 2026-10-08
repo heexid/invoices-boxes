@@ -18,26 +18,26 @@ People who want a lightweight record of everyday purchases need to save receipts
 
 ## Core experience
 
-1. A visitor can browse a read-only sample drawer without signing in. It contains 13 IDR receipts across five boxes.
-2. A new signed-in account starts with an empty drawer.
+1. A visitor without a session sees login or registration. A new account starts with an empty drawer.
+2. After successful registration, the app signs out the created session, shows a short success screen, then returns to login. Email confirmation must be disabled in the linked Supabase project.
 3. A signed-in user opens the scan/add action, chooses a camera photo, image, or PDF, and reviews editable extracted data. Manual receipt entry is also supported.
-4. The user edits merchant, date, currency, subtotal, tax, total, payment method, notes, box, and line items, then saves.
+4. The user enters merchant, date, currency, payment method, notes, box, and line items. Subtotal and total are calculated from line items; tax is optional.
 5. Saved receipts appear in the selected box and drawer, can be edited or deleted, and can be moved between boxes.
 
 ## Functional requirements
 
 ### Authentication and account
 
-- Support email/password registration, configured email confirmation, sign-in, persistent sessions, password reset/update, and sign-out through Supabase Auth.
+- Support email/password registration, sign-in, persistent sessions, password reset/update, and sign-out through Supabase Auth. Direct registration requires Supabase Email Confirm Email to be disabled.
 - Show an account profile using a name derived from the first segment of the email address.
-- Keep sample browsing available without an account; prevent sample edits from being persisted.
+- Require a valid session to open drawer data; never load guest or bundled receipt data.
 
 ### Drawer homepage
 
 - Default the month and year to the current local month; allow month navigation across year boundaries.
 - Show the selected month’s receipt count and IDR/mixed-currency total without converting currencies.
 - Show four box cards initially and link to a dedicated page listing every box.
-- Show at most five recently created receipts, using creation time for signed-in data and receipt date for sample data.
+- Show at most five recently created receipts, using creation time and falling back to receipt date when unavailable.
 - Keep the homepage header full-width across the centered phone-width canvas; open receipt details as an overlay so closing one returns to the same drawer view.
 - Provide CSV export for the current drawer month. Do not show homepage search, box filter, or PDF controls.
 - Provide empty states for boxes and recent receipts when those sections have no content.
@@ -78,7 +78,7 @@ People who want a lightweight record of everyday purchases need to save receipts
 
 ## Acceptance criteria
 
-- Visitors can browse the populated sample drawer; new accounts start empty.
+- Visitors without a session see login or registration; signed-in accounts load only their own data.
 - Users can register, sign in, remain signed in after refresh, reset their password, and sign out.
 - Users can upload an image/PDF, review and edit extraction, save it, reload the app, and find the same receipt and line items.
 - Users can create and edit receipts manually, move them between boxes, edit box details, and delete records.
@@ -89,4 +89,4 @@ People who want a lightweight record of everyday purchases need to save receipts
 
 - A first-time signed-in user can save a manually entered or scanned receipt without losing the draft on extraction failure.
 - A saved receipt remains available after reload and can be found from its assigned box.
-- The sample drawer and empty account state both communicate what the user can do next without clutter or judgmental language.
+- Empty account states communicate what the user can do next without clutter or judgmental language.

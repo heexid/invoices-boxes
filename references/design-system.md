@@ -38,6 +38,7 @@ Use brown gradients and inset shadows for cardboard scenes, pale green gingham a
 
 ## Components and materials
 
+- **Authentication:** Use a compact, single-column form centered in the same 480px canvas. Pair the existing logo with a clear welcome heading, short supporting copy, labeled email/password fields, a password visibility control, and one full-width green primary action. Keep sign-in and registration switching simple; use warm paper surfaces and red asterisks for required fields. Long setup and service errors must wrap inside the form.
 - **Receipt slips:** Warm-white paper with zigzag edges, dashed rules, monospace content, clear totals, and a barcode accent. Each receipt remains its own slip and shows its own items and total.
 - **Boxes:** Cardboard-like cards with an inset frame, optional small object illustration, a few receipt previews, and a full-width warm-paper summary strip inset from the frame. Keep the name, total, and count readable; long totals may wrap without clipping.
 - **Drawer scene:** Gingham surface behind an open cardboard box with a small set of receipt slips and a month total.
@@ -50,6 +51,7 @@ Use brown gradients and inset shadows for cardboard scenes, pale green gingham a
 - Preserve keyboard access, visible focus states, semantic buttons and labels, and accessible names for icon-only actions.
 - Truncate long titles only where space is limited; preserve full names in accessible labels or native titles. Wrap long slip content.
 - Provide loading, disabled, success, and error feedback for network actions. Keep receipt drafts intact when OCR fails.
+- Keep unauthenticated visitors on login/registration; never render bundled guest receipt data. Show registration success before returning to login, and explain the Supabase Confirm Email setup requirement when registration does not return a session.
 - Never communicate overspending as failure. Budgets use a quiet fill indicator rather than red alerts.
 
 ## Copy principles

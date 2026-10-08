@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowDownToLine, ArrowLeft, ArrowRight, Box as BoxIcon, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, FileImage, FileText, Info, LogIn, LogOut, MoreVertical, Pencil, Plus, Search, Sparkles, Trash2, UserRound, X } from "lucide-react";
-import { demoBoxes, demoReceipts, formatDay, formatIDR, formatMoney, formatShortDate, formatTotals } from "@/lib/data";
+import { ArrowDownToLine, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Eye, EyeOff, FileImage, FileText, Info, LogIn, LogOut, MoreVertical, Pencil, Plus, Search, Trash2, UserRound, X } from "lucide-react";
+import { formatDay, formatIDR, formatMoney, formatShortDate, formatTotals } from "@/lib/data";
 import { getSupabase } from "@/lib/supabase";
 import { ReceiptEditor } from "@/components/receipt-editor";
 import { EmptyStateIllustration, type EmptyIllustrationKind } from "@/components/empty-state-illustration";
@@ -11,7 +11,7 @@ import { blankReceiptDraft, calculateReceiptTotals, extractionToDraft, receiptTo
 import type { Box, ExtractedReceiptDraft, Receipt, ReceiptDraft } from "@/lib/types";
 
 type Screen = "drawer" | "boxes" | "box" | "print-preview" | "recent" | "receipt" | "profile" | "auth";
-type AuthMode = "signin" | "signup" | "reset" | "update-password";
+type AuthMode = "signin" | "signup" | "reset" | "update-password" | "signup-success";
 type OCRState = "idle" | "uploading" | "extracting" | "ready" | "error";
 const emailName = (email: string | undefined) => email?.split("@")[0]?.split(/[._+-]+/).filter(Boolean)[0] ?? "";
 const monthName = (month: string) => new Date(`${month}-15T12:00:00`).toLocaleDateString("en", { month: "long", year: "numeric" });
@@ -22,13 +22,14 @@ const addedAtDate = (receipt: Receipt) => {
 const dateMonthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 
 export default function HomePage() {
-  const [screen, setScreen] = useState<Screen>("drawer");
+  const [screen, setScreen] = useState<Screen>("auth");
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
-  const [isDemo, setIsDemo] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [signupEmail, setSignupEmail] = useState("");
   const [userEmail, setUserEmail] = useState<string>();
-  const [boxes, setBoxes] = useState<Box[]>(demoBoxes);
-  const [receipts, setReceipts] = useState<Receipt[]>(demoReceipts);
-  const [selectedBox, setSelectedBox] = useState<string>(demoBoxes[2].id);
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [selectedBox, setSelectedBox] = useState<string>("");
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [month, setMonth] = useState(() => {
     const now = new Date();
@@ -50,7 +51,7 @@ export default function HomePage() {
   const [draftOrder, setDraftOrder] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [fileUrl, setFileUrl] = useState("");
-  const [draft, setDraft] = useState<ReceiptDraft>(blankReceiptDraft(demoBoxes[0]));
+  const [draft, setDraft] = useState<ReceiptDraft>(blankReceiptDraft());
   const [editorReceiptId, setEditorReceiptId] = useState<string | null>(null);
   const [originalPath, setOriginalPath] = useState<string | null>(null);
   const [ocrState, setOcrState] = useState<OCRState>("idle");
@@ -84,7 +85,6 @@ export default function HomePage() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
     setUserEmail(session.user.email);
-    setIsDemo(false);
     const [{ data: boxRows, error: boxError }, { data: receiptRows, error: receiptError }] = await Promise.all([
       supabase.from("boxes").select("*").order("sort_order").order("created_at"),
       supabase.from("receipts").select("*").order("created_at", { ascending: false }),
@@ -103,24 +103,32 @@ export default function HomePage() {
   }, [supabase, notifyError]);
 
   useEffect(() => {
-    if (!supabase) return;
-    void loadAccount();
+    if (!supabase) { setAuthLoading(false); setScreen("auth"); return; }
+    let active = true;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY") { setAuthMode("update-password"); setScreen("auth"); }
-      if (session?.user) { setUserEmail(session.user.email); setIsDemo(false); window.setTimeout(() => void loadAccount(), 0); }
-      else { setIsDemo(true); setUserEmail(undefined); setBoxes(demoBoxes); setReceipts(demoReceipts); }
+      if (event === "PASSWORD_RECOVERY") { setAuthMode("update-password"); setScreen("auth"); setAuthLoading(false); }
+      if (session?.user) setUserEmail(session.user.email);
+      if (event === "SIGNED_OUT") {
+        setUserEmail(undefined); setBoxes([]); setReceipts([]); setSelectedBox(""); setScreen("auth"); setAuthLoading(false);
+      }
     });
-    return () => subscription.unsubscribe();
+    void supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!active) return;
+      if (session?.user) { setUserEmail(session.user.email); setScreen("drawer"); await loadAccount(); }
+      else setScreen("auth");
+      if (active) setAuthLoading(false);
+    }).catch(() => { if (active) { setScreen("auth"); setAuthLoading(false); } });
+    return () => { active = false; subscription.unsubscribe(); };
   }, [supabase, loadAccount]);
 
   useEffect(() => {
     let active = true;
-    if (showOriginal && selectedReceipt?.original_image_url && supabase && !isDemo) {
+    if (showOriginal && selectedReceipt?.original_image_url && supabase) {
       void supabase.storage.from("receipt-originals").createSignedUrl(selectedReceipt.original_image_url, 3600)
         .then(({ data }) => { if (active) setOriginalSignedUrl(data?.signedUrl ?? ""); });
     } else setOriginalSignedUrl("");
     return () => { active = false; };
-  }, [showOriginal, selectedReceipt, supabase, isDemo]);
+  }, [showOriginal, selectedReceipt, supabase]);
 
   const monthReceipts = useMemo(() => receipts.filter((receipt) => receipt.date.slice(0, 7) === month), [receipts, month]);
   const sortedRecentReceipts = useMemo(() => [...receipts]
@@ -147,7 +155,6 @@ export default function HomePage() {
   const boxIDRTotal = boxReceipts.filter((receipt) => receipt.currency === "IDR").reduce((sum, receipt) => sum + receipt.total, 0);
 
   const openAuth = (mode: AuthMode = "signin") => { setAuthMode(mode); setScreen("auth"); setModal(null); };
-  const leaveAuth = () => setScreen("drawer");
   function openRecentReceipts() { setRecentQuery(""); setRecentYear("all"); setRecentMonth("all"); setScreen("recent"); }
 
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
@@ -168,19 +175,32 @@ export default function HomePage() {
         if (error) throw error;
         setAuthNotice("Password updated. You’re signed in."); setScreen("drawer"); void loadAccount(); return;
       }
-      const result = authMode === "signup"
-        ? await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/` } })
-        : await supabase.auth.signInWithPassword({ email, password });
-      if (result.error) throw result.error;
-      if (authMode === "signup" && !result.data.session) { setAuthNotice("Check your email to confirm your account, then sign in."); setAuthMode("signin"); return; }
-      setScreen("drawer"); notify(authMode === "signup" ? "Your new drawer is ready." : "Welcome back to your drawer."); void loadAccount();
-    } catch (error) { setAuthError(error instanceof Error ? error.message : "Could not complete that account request."); }
+      if (authMode === "signup") {
+        const { data: signupData, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        if (!signupData.session) {
+          setAuthError("Supabase didn’t return an active session. For direct registration, turn off Confirm Email under Authentication → Providers → Email. If this email already has an account, log in instead.");
+          return;
+        }
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) throw signOutError;
+        setSignupEmail(email); setAuthMode("signup-success"); return;
+      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      setUserEmail(email); setScreen("drawer"); notify("Welcome back to your drawer."); void loadAccount();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not complete that account request.";
+      setAuthError(authMode === "signup" && /rate.?limit/i.test(message)
+        ? "Too many signup emails were requested. Wait a little while before trying again."
+        : message);
+    }
     finally { setAuthBusy(false); }
   }
 
   async function signOut() {
     if (supabase) await supabase.auth.signOut();
-    setUserEmail(undefined); setIsDemo(true); setBoxes(demoBoxes); setReceipts(demoReceipts); setScreen("drawer"); notify("Signed out.");
+    setUserEmail(undefined); setBoxes([]); setReceipts([]); setSelectedBox(""); setScreen("auth"); setAuthMode("signin"); setAuthNotice(""); setAuthError("");
   }
 
   async function runOCR(path: string): Promise<ExtractedReceiptDraft> {
@@ -203,7 +223,7 @@ export default function HomePage() {
     setAuthError("");
     if (!/^image\/(jpeg|png|webp)$/.test(nextFile.type) && nextFile.type !== "application/pdf") { setOcrError("Choose a JPG, PNG, WebP photo, or PDF."); setOcrState("error"); return; }
     if (nextFile.size > 20 * 1024 * 1024) { setOcrError("This file is over 20 MB. Choose a smaller photo or PDF."); setOcrState("error"); return; }
-    if (!supabase || isDemo) { openAuth("signin"); return; }
+    if (!supabase) { openAuth("signin"); return; }
     if (fileUrl) URL.revokeObjectURL(fileUrl);
     setFile(nextFile); setFileUrl(nextFile.type.startsWith("image/") ? URL.createObjectURL(nextFile) : ""); setOcrState("uploading"); setOcrError("");
     try {
@@ -229,7 +249,6 @@ export default function HomePage() {
   function chooseFile(event: ChangeEvent<HTMLInputElement>) { void useFile(event.target.files?.[0]); event.target.value = ""; }
 
   function openScan() {
-    if (isDemo) { openAuth("signin"); notify("Sign in to add receipts to your drawer."); return; }
     setFile(null); setFileUrl(""); setDraft(blankReceiptDraft(activeBox)); setEditorReceiptId(null); setOriginalPath(null); setOcrState("idle"); setOcrError(""); setModal("scan");
   }
 
@@ -237,7 +256,7 @@ export default function HomePage() {
 
   async function saveReceipt(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isDemo || !supabase) { notify("Sign in to save a receipt to your drawer."); return; }
+    if (!supabase) { openAuth("signin"); return; }
     const completedItems = draft.line_items.filter((item) => item.description.trim() || item.amount.trim());
     if (!draft.merchant.trim() || !draft.date || !draft.currency || completedItems.length === 0 || completedItems.some((item) => !item.description.trim() || item.amount.trim() === "" || !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 || !Number.isFinite(Number(item.amount)) || Number(item.amount) < 0)) {
       notifyError("Add the required receipt details and complete each item with a quantity and price."); return;
@@ -260,7 +279,7 @@ export default function HomePage() {
   }
 
   async function deleteReceipt(receipt: Receipt) {
-    if (!supabase || isDemo) return;
+    if (!supabase) return;
     const { error } = await supabase.from("receipts").delete().eq("id", receipt.id);
     if (error) { notifyError(error.message); return; }
     if (receipt.original_image_url) await supabase.storage.from("receipt-originals").remove([receipt.original_image_url]);
@@ -268,7 +287,7 @@ export default function HomePage() {
   }
 
   async function saveBox(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (isDemo || !supabase) { notify("Sign in to organize your boxes."); return; }
+    event.preventDefault(); if (!supabase) { openAuth("signin"); return; }
     const name = draftBoxName.trim(); if (!name) return;
     const payload = { user_id: (await supabase.auth.getUser()).data.user?.id, name, illustration: draftIllustration, color: draftColor, budget: draftBudget ? Number(draftBudget) : null, sort_order: draftOrder };
     const query = editingBox ? supabase.from("boxes").update(payload).eq("id", editingBox.id).select().single() : supabase.from("boxes").insert(payload).select().single();
@@ -284,7 +303,7 @@ export default function HomePage() {
   }
 
   async function deleteBox(box: Box) {
-    if (!supabase || isDemo) return;
+    if (!supabase) return;
     const { error: unfileError } = await supabase.from("receipts").update({ box_id: null, category: "Unfiled" }).eq("box_id", box.id);
     if (unfileError) { notifyError(unfileError.message); return; }
     const { error } = await supabase.from("boxes").delete().eq("id", box.id);
@@ -295,7 +314,7 @@ export default function HomePage() {
 
   async function moveReceipt(receipt: Receipt, boxId: string) {
     const destination = boxes.find((box) => box.id === boxId); if (!destination) return;
-    if (isDemo || !supabase) { notify("This sample drawer is just for browsing."); return; }
+    if (!supabase) return;
     const { error } = await supabase.from("receipts").update({ box_id: destination.id, category: destination.name }).eq("id", receipt.id);
     if (error) { notifyError(error.message); return; }
     setReceipts((prior) => prior.map((item) => item.id === receipt.id ? { ...item, box_id: destination.id, category: destination.name } : item));
@@ -333,21 +352,22 @@ export default function HomePage() {
     </motion.button>;
   }
 
-  if (screen === "auth") return <AuthScreen mode={authMode} setMode={setAuthMode} busy={authBusy} configured={!!supabase} onSubmit={handleAuth} onBack={leaveAuth} notice={authNotice} error={authError} />;
+  if (authLoading) return <main className="auth-shell auth-loading"><div role="status" aria-live="polite">Opening your drawer…</div></main>;
+  if (screen === "auth") return <AuthScreen mode={authMode} setMode={setAuthMode} busy={authBusy} configured={!!supabase} onSubmit={handleAuth} notice={authNotice} error={authError} signupEmail={signupEmail} />;
 
   return <main className="app-shell">
     {screen === "drawer" && <div className="drawer-sticky-header"><header className="topbar no-print">
-      <div className="email-avatar" role="img" aria-label={userEmail ? `Avatar for ${emailName(userEmail)}` : "Sample drawer avatar"} title={userEmail ? emailName(userEmail) : "Sample drawer"}>{emailName(userEmail) ? emailName(userEmail).slice(0, 3).toUpperCase() : "A"}</div>
+      <div className="email-avatar" role="img" aria-label={`Avatar for ${emailName(userEmail) || "your account"}`} title={emailName(userEmail) || "Your account"}>{emailName(userEmail) ? emailName(userEmail).slice(0, 3).toUpperCase() : "A"}</div>
       <div className="header-brand"><button className="icon-btn profile-trigger" onClick={openProfile} aria-label="Open profile"><UserRound size={17}/></button></div>
     </header>
 
     <section className="page-head no-print">
-      <div className="month-overview"><p className="month-year">{month.slice(0, 4)}</p><div className="month-switch"><button onClick={() => changeMonth(-1)} aria-label="Previous month"><ChevronLeft size={16}/></button><h1>{monthName(month).split(" ")[0]}</h1><button onClick={() => changeMonth(1)} aria-label="Next month"><ChevronRight size={16}/></button></div><p className="subhead">{monthReceipts.length} {monthReceipts.length === 1 ? "receipt" : "receipts"} in {isDemo ? "the drawer" : "your drawer"}</p></div>
+      <div className="month-overview"><p className="month-year">{month.slice(0, 4)}</p><div className="month-switch"><button onClick={() => changeMonth(-1)} aria-label="Previous month"><ChevronLeft size={16}/></button><h1>{monthName(month).split(" ")[0]}</h1><button onClick={() => changeMonth(1)} aria-label="Next month"><ChevronRight size={16}/></button></div><p className="subhead">{monthReceipts.length} {monthReceipts.length === 1 ? "receipt" : "receipts"} in your drawer</p></div>
       <button className="primary-btn desktop-add-receipt" onClick={openScan}><Plus size={16}/> Add receipt</button>
     </section></div>}
 
     {screen === "boxes" ? <section className="boxes-page">
-      <nav className="detail-navbar boxes-navbar"><button className="detail-nav-back" onClick={() => setScreen("drawer")} aria-label="Back to the drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title">Boxes</h1><div className="detail-nav-actions"><button className="detail-nav-menu" onClick={()=>isDemo?openAuth("signup"):openBoxEditor()} aria-label="Add a box" title="Add a box"><Plus size={21}/></button></div></nav>
+      <nav className="detail-navbar boxes-navbar"><button className="detail-nav-back" onClick={() => setScreen("drawer")} aria-label="Back to the drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title">Boxes</h1><div className="detail-nav-actions"><button className="detail-nav-menu" onClick={()=>openBoxEditor()} aria-label="Add a box" title="Add a box"><Plus size={21}/></button></div></nav>
       <div className="boxes-page-content"><p className="boxes-page-count">{boxes.length} {boxes.length===1?"box":"boxes"}</p><div className="box-grid all-boxes-grid">{boxes.length ? boxes.map(renderBoxCard) : <EmptyState kind="boxes" title="Your boxes are waiting" copy="Give your receipts a place to land by creating your first box." className="boxes-empty-state"/>}</div></div>
     </section> : screen === "recent" ? <section className="recent-page">
       <nav className="detail-navbar recent-navbar"><button className="detail-nav-back" onClick={() => setScreen("drawer")} aria-label="Back to the drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title">Recently added</h1><span aria-hidden="true"/></nav>
@@ -370,15 +390,15 @@ export default function HomePage() {
       <nav className="detail-navbar profile-navbar"><button className="detail-nav-back" onClick={() => setScreen("drawer")} aria-label="Back to the drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title">Profile</h1><span aria-hidden="true"/></nav>
       <div className="profile-card">
         <div className="profile-avatar">{emailName(userEmail) ? emailName(userEmail).slice(0, 3).toUpperCase() : "A"}</div>
-        <p className="eyebrow">your profile</p><h1>{emailName(userEmail) || "Guest"}</h1>
-        <p className="profile-email">{userEmail || "Sample drawer · browse before signing in"}</p>
-        {isDemo ? <div className="profile-actions"><button className="primary-btn" onClick={() => openAuth("signin")}><LogIn size={15}/> Sign in</button><button className="secondary-btn" onClick={() => openAuth("signup")}>Create an account</button></div> : <button className="secondary-btn profile-signout" onClick={() => void signOut()}><LogOut size={15}/> Sign out</button>}
+        <p className="eyebrow">your profile</p><h1>{emailName(userEmail) || "Your account"}</h1>
+        <p className="profile-email">{userEmail}</p>
+        <button className="secondary-btn profile-signout" onClick={() => void signOut()}><LogOut size={15}/> Sign out</button>
       </div>
     </section> : screen==="print-preview"&&activeBox?<section className="print-preview-page">
       <nav className="detail-navbar preview-navbar"><button className="detail-nav-back" onClick={()=>setScreen("box")} aria-label="Back to box"><ChevronLeft size={22}/></button></nav>
       <div className="print-preview-content"><ReceiptSlipList receipts={boxAllReceipts}/><button className="primary-btn preview-print-button no-print" onClick={printBox}><FileText size={15}/> Print roll</button></div>
     </section> : screen==="box"&&activeBox?<section className="box-detail-page">
-      <nav className="detail-navbar"><button className="detail-nav-back" onClick={()=>setScreen("drawer")} aria-label="Back to drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title" title={activeBox.name}>{activeBox.name}</h1><div className="detail-nav-actions"><div className="box-menu-wrap"><button className="detail-nav-menu" aria-label="Box actions" aria-haspopup="menu" aria-expanded={boxMenuOpen} onClick={()=>setBoxMenuOpen((open)=>!open)}><MoreVertical size={20}/></button>{boxMenuOpen&&<div className="box-actions-menu" role="menu"><button role="menuitem" onClick={()=>{setBoxMenuOpen(false);setScreen("print-preview");}}><FileText size={14}/> Preview print roll</button>{!isDemo&&<button role="menuitem" onClick={()=>{setBoxMenuOpen(false);openBoxEditor(activeBox);}}><Pencil size={14}/> Edit box</button>}</div>}</div></div></nav>
+      <nav className="detail-navbar"><button className="detail-nav-back" onClick={()=>setScreen("drawer")} aria-label="Back to drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title" title={activeBox.name}>{activeBox.name}</h1><div className="detail-nav-actions"><div className="box-menu-wrap"><button className="detail-nav-menu" aria-label="Box actions" aria-haspopup="menu" aria-expanded={boxMenuOpen} onClick={()=>setBoxMenuOpen((open)=>!open)}><MoreVertical size={20}/></button>{boxMenuOpen&&<div className="box-actions-menu" role="menu"><button role="menuitem" onClick={()=>{setBoxMenuOpen(false);setScreen("print-preview");}}><FileText size={14}/> Preview print roll</button><button role="menuitem" onClick={()=>{setBoxMenuOpen(false);openBoxEditor(activeBox);}}><Pencil size={14}/> Edit box</button></div>}</div></div></nav>
       <div className="box-detail-layout"><div><div className="box-detail-scene" data-tone={activeBox.color}><span className="big-object">{activeBox.illustration==="tomato"?"🍅":activeBox.illustration==="cup"?"☕":activeBox.illustration==="fork"?"🍴":activeBox.illustration==="car"?"🚕":activeBox.illustration==="flower"?"🌼":activeBox.illustration||"📦"}</span><div className="detail-stamp">{activeBox.name}<strong>{formatTotals(boxAllReceipts)}</strong><small>×{boxAllReceipts.length} little things</small></div><div className="detail-paper-stack">{boxAllReceipts.slice(0,4).map((receipt,index)=><button key={receipt.id} className={`detail-mini-paper dm-${index}`} onClick={()=>setSelectedReceipt(receipt)}><b>{receipt.merchant}</b><span>{formatShortDate(receipt.date)}</span><strong>{formatMoney(receipt.total, receipt.currency)}</strong></button>)}</div></div>{activeBox.budget&&<div className="budget-note"><span>This month’s IDR budget</span><span>{formatIDR(boxIDRTotal)} of {formatIDR(activeBox.budget)}</span><div className="budget-track"><i style={{width:`${Math.min(100,Math.round(boxIDRTotal/activeBox.budget*100))}%`}}/></div></div>}<div className="box-export-row no-print"><button className="box-export-btn" onClick={exportBoxCSV} disabled={!boxAllReceipts.length}><ArrowDownToLine size={15}/> Export box to CSV</button></div></div>
         <div className="summary-column"><div className="box-receipts-heading"><div><h2>Receipts</h2><p>{visibleBoxReceipts.length} {visibleBoxReceipts.length === 1 ? "receipt" : "receipts"}</p></div><div className="box-receipt-filters"><label className="box-month-filter"><span className="sr-only">Filter by month</span><select aria-label="Filter receipts by month" value={boxReceiptMonth} onChange={(event)=>setBoxReceiptMonth(event.target.value)}><option value="all">All months</option>{boxReceiptMonths.map((value)=><option key={value} value={value}>{new Date(`${value}-15T12:00:00`).toLocaleDateString("en",{month:"long"})}</option>)}</select><ChevronDown size={14}/></label><label className="box-year-filter"><span className="sr-only">Filter by year</span><select aria-label="Filter receipts by year" value={boxReceiptYear} onChange={(event)=>{setBoxReceiptYear(event.target.value);setBoxReceiptMonth("all");}}><option value="all">All Years</option>{boxReceiptYears.map((year)=><option key={year} value={year}>{year}</option>)}</select></label></div></div><ReceiptSlipList receipts={visibleBoxReceipts} onReceiptClick={setSelectedReceipt}/></div>
       </div>
@@ -402,12 +422,11 @@ export default function HomePage() {
         <div className="panel-card">
           <div className="panel-heading"><h2>Recently added</h2><button className="subtle-link recent-see-all" onClick={openRecentReceipts}>See all</button></div>
           <div className="receipt-list">
-            {recentReceipts.length ? recentReceipts.map((receipt)=><div key={receipt.id} className="receipt-row" draggable={!isDemo} onDragStart={(event)=>event.dataTransfer.setData("text/plain",receipt.id)} onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}} role="button" tabIndex={0} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedReceipt(receipt);setShowOriginal(false);}}}>
+            {recentReceipts.length ? recentReceipts.map((receipt)=><div key={receipt.id} className="receipt-row" draggable onDragStart={(event)=>event.dataTransfer.setData("text/plain",receipt.id)} onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}} role="button" tabIndex={0} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedReceipt(receipt);setShowOriginal(false);}}}>
               <span className="date-chip"><small>{new Date(`${receipt.date}T12:00:00`).toLocaleDateString("en",{month:"short"})}</small>{formatDay(receipt.date)}</span><span style={{minWidth:0}}><span className="merchant-name" style={{display:"block"}}>{receipt.merchant}</span><span className="merchant-meta">{boxes.find((box)=>box.id===receipt.box_id)?.name??"Unfiled"}</span></span><span className="receipt-amount">{formatMoney(receipt.total, receipt.currency)}</span>
             </div>):<EmptyState kind="receipts" title="No receipts yet" copy="Your newest receipts will show up here after you add one." className="recent-empty-state"/>}
           </div>
         </div>
-        {isDemo&&<div style={{marginTop:12,padding:"13px 14px",border:"1px solid var(--line)",borderRadius:9,background:"#f4f3ed",fontSize:11,color:"#85847b",lineHeight:1.6}}><Sparkles size={14} style={{verticalAlign:"-3px",marginRight:5,color:"#71866d"}}/> Looking around? This sample drawer is just for browsing. <button onClick={()=>openAuth("signup")} style={{border:0,background:"none",color:"var(--green)",fontWeight:700,padding:0}}>Make one of your own →</button></div>}
       </aside>
     </div>}
 
@@ -427,8 +446,8 @@ export default function HomePage() {
       <div className="modal-head detail-modal-head"><button className="close-btn" onClick={()=>setSelectedReceipt(null)} aria-label="Close"><X size={17}/></button></div>
       <div className="paper-slip"><div className="paper-head"><b>{selectedReceipt.merchant}</b><small>{new Date(`${selectedReceipt.date}T12:00:00`).toLocaleDateString("en",{day:"numeric",month:"long",year:"numeric"})} · {selectedReceipt.currency}</small></div><div className="paper-rule"/>{selectedReceipt.line_items.map((item)=><div className="paper-line" key={item.id}><span>{item.quantity.toString().padStart(2,"0")}</span><span>{item.description}</span><span>{formatMoney(item.amount * item.quantity, selectedReceipt.currency)}</span></div>)}<div className="paper-line"><span/><span>Subtotal</span><span>{formatMoney(selectedReceipt.subtotal, selectedReceipt.currency)}</span></div>{selectedReceipt.tax_enabled||selectedReceipt.tax>0?<div className="paper-line"><span/><span>Tax{selectedReceipt.tax_rate!=null?` · ${selectedReceipt.tax_rate}%`:""}</span><span>{formatMoney(selectedReceipt.tax, selectedReceipt.currency)}</span></div>:null}<div className="paper-line" style={{border:0,color:"#85847b"}}><span/><span>Paid with {selectedReceipt.payment_method}</span><span/></div><div className="paper-total"><span>TOTAL</span><span>{formatMoney(selectedReceipt.total, selectedReceipt.currency)}</span></div><div className="barcode"/></div>
       {selectedReceipt.notes&&<p style={{fontSize:12,color:"#7d7c74",margin:"0 4px 14px",textAlign:"center"}}>“{selectedReceipt.notes}”</p>}
-      {!isDemo&&<div className="move-row"><label htmlFor="move-box">Tuck into</label><select id="move-box" value={selectedReceipt.box_id} onChange={(event)=>void moveReceipt(selectedReceipt,event.target.value)}>{boxes.map((box)=><option key={box.id} value={box.id}>{box.name}</option>)}</select></div>}
-      {!isDemo&&<div className="modal-actions"><button className="secondary-btn" onClick={()=>setPendingDelete({kind:"receipt",receipt:selectedReceipt})}><Trash2 size={14}/> Delete</button><button className="primary-btn" onClick={()=>editReceipt(selectedReceipt)}><Pencil size={14}/> Edit receipt</button></div>}
+      <div className="move-row"><label htmlFor="move-box">Tuck into</label><select id="move-box" value={selectedReceipt.box_id} onChange={(event)=>void moveReceipt(selectedReceipt,event.target.value)}>{boxes.map((box)=><option key={box.id} value={box.id}>{box.name}</option>)}</select></div>
+      <div className="modal-actions"><button className="secondary-btn" onClick={()=>setPendingDelete({kind:"receipt",receipt:selectedReceipt})}><Trash2 size={14}/> Delete</button><button className="primary-btn" onClick={()=>editReceipt(selectedReceipt)}><Pencil size={14}/> Edit receipt</button></div>
       <button className="toggle-original" onClick={()=>setShowOriginal(!showOriginal)}><FileImage size={14}/>{showOriginal?"Hide original":"View original"}<ChevronDown size={13} style={{transform:showOriginal?"rotate(180deg)":undefined}}/></button>
       {showOriginal&&<div className="original-preview">{originalSignedUrl?<img style={{maxWidth:"100%",maxHeight:260,objectFit:"contain"}} src={originalSignedUrl} alt="Original receipt"/>:selectedReceipt.original_image_url?<span>Opening your original…</span>:<span>No original scan attached to this receipt.</span>}</div>}
     </motion.section></div>}</AnimatePresence>
@@ -440,10 +459,42 @@ export default function HomePage() {
   </main>;
 }
 
-function AuthScreen({mode,setMode,busy,configured,onSubmit,onBack,notice,error}:{mode:AuthMode;setMode:(mode:AuthMode)=>void;busy:boolean;configured:boolean;onSubmit:(event:FormEvent<HTMLFormElement>)=>void;onBack:()=>void;notice:string;error:string}) {
-  const title = mode === "signin" ? "Welcome back." : mode === "signup" ? "Make a little room." : mode === "reset" ? "Find your way back." : "Choose a new password.";
-  const passwordMode = mode !== "reset";
-  return <main className="auth-shell"><aside className="auth-aside"><button className="brand" onClick={onBack}><span className="brand-mark"><BoxIcon size={17}/></span>drawer</button><div className="auth-copy"><h1>Money stuff,<br/>made a little softer.</h1><p>Receipts have a home here. Come as you are, tuck them away, and get on with your day.</p></div><span className="auth-foot">A little room for real life · IDR</span></aside><section className="auth-main"><form className="auth-form" onSubmit={onSubmit}><button type="button" className="subtle-link" onClick={onBack} style={{padding:0,marginBottom:25}}><ArrowLeft size={13} style={{verticalAlign:"-2px",marginRight:4}}/> back to the sample drawer</button><h2>{title}</h2><p>{mode==="signin"?"Your receipts are right where you left them.":mode==="signup"?"Your own little home for receipts and everyday things.":mode==="reset"?"We’ll send a secure password reset link to your email.":"Use at least 6 characters for your new password."}</p><div className="field"><label>Email</label><input name="email" type="email" autoComplete="email" placeholder="you@example.com" required disabled={mode==="update-password"}/></div>{passwordMode&&<div className="field"><label>New password</label><input name="password" type="password" autoComplete={mode==="signin"?"current-password":"new-password"} minLength={6} placeholder="At least 6 characters" required/></div>}<button className="primary-btn" type="submit" disabled={busy||!configured}>{busy?<span className="loading-dot"/>:mode==="signin"?<LogIn size={16}/>:<ArrowRight size={16}/>} {busy?"Just a moment…":mode==="signin"?"Sign in":mode==="signup"?"Create my drawer":mode==="reset"?"Send reset link":"Update password"}</button>{mode==="signin"&&<div className="auth-switch"><button type="button" onClick={()=>setMode("reset")}>Forgot your password?</button></div>}{(mode==="signin"||mode==="signup")&&<div className="auth-switch">{mode==="signin"?"New around here?":"Already have a drawer?"} <button type="button" onClick={()=>setMode(mode==="signin"?"signup":"signin")}>{mode==="signin"?"Make an account":"Sign in"}</button></div>}{error&&<div className="auth-note auth-error" role="alert">{error}</div>}{notice&&<div className="auth-note" role="status">{notice}</div>}{!configured&&<div className="auth-note">Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in <code>.env.local</code>, then restart the app to enable sign-in.</div>}{mode!=="update-password"&&<div className="auth-note">Your drawer starts with nothing in it. Add just what you need, whenever you’re ready.</div>}</form></section></main>;
+function AuthScreen({mode,setMode,busy,configured,onSubmit,notice,error,signupEmail}:{mode:AuthMode;setMode:(mode:AuthMode)=>void;busy:boolean;configured:boolean;onSubmit:(event:FormEvent<HTMLFormElement>)=>void;notice:string;error:string;signupEmail:string}) {
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  useEffect(() => {
+    if (mode !== "signup-success") return;
+    const timer = window.setTimeout(() => setMode("signin"), 3000);
+    return () => window.clearTimeout(timer);
+  }, [mode, setMode]);
+
+  if (mode === "signup-success") return <main className="auth-shell"><section className="auth-card auth-success-card" aria-live="polite">
+    <div className="auth-brand"><img src="/icon.svg" alt=""/><span>drawer</span></div>
+    <div className="auth-success-icon"><Check size={24}/></div><h1>Account created</h1>
+    <p>Your account is ready{signupEmail ? ` for ${signupEmail}` : ""}. Sign in with your email and password to open your drawer.</p>
+    <button type="button" className="primary-btn" onClick={()=>{setMode("signin");}}>Continue to sign in</button>
+    <p className="auth-countdown">Returning to sign in in a moment…</p>
+  </section></main>;
+
+  const passwordMode = mode === "signin" || mode === "signup" || mode === "update-password";
+  const title = mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : mode === "reset" ? "Reset password" : "Choose a new password";
+  const description = mode === "signin" ? "Enter your email and password to access your drawer." : mode === "signup" ? "A little home for your receipts and everyday spending." : mode === "reset" ? "We’ll send a secure password reset link to your email." : "Choose a new password for your account.";
+  const submitLabel = mode === "signin" ? "Log in" : mode === "signup" ? "Create account" : mode === "reset" ? "Send reset link" : "Update password";
+
+  return <main className="auth-shell"><section className="auth-card">
+    <div className="auth-brand"><img src="/icon.svg" alt=""/><span>drawer</span></div>
+    <form className="auth-form" onSubmit={onSubmit}>
+      <h1>{title}</h1><p className="auth-description">{description}</p>
+      {mode !== "update-password" && <div className="field"><label htmlFor="auth-email">Email <span className="auth-required">*</span></label><input id="auth-email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required/></div>}
+      {passwordMode && <div className="field"><label htmlFor="auth-password">{mode === "update-password" ? "New password" : "Password"} <span className="auth-required">*</span></label><div className="auth-password-field"><input id="auth-password" name="password" type={passwordVisible ? "text" : "password"} autoComplete={mode === "signin" ? "current-password" : "new-password"} minLength={6} placeholder={mode === "signin" ? "Enter your password" : "At least 6 characters"} required/><button type="button" className="auth-password-toggle" onClick={()=>setPasswordVisible((visible)=>!visible)} aria-label={passwordVisible ? "Hide password" : "Show password"} aria-pressed={passwordVisible}>{passwordVisible ? <EyeOff size={17}/> : <Eye size={17}/>}</button></div></div>}
+      {mode === "signin" && <div className="auth-forgot"><button type="button" onClick={()=>setMode("reset")}>Forgot password?</button></div>}
+      <button className="primary-btn auth-submit" type="submit" disabled={busy||!configured}>{busy?<span className="loading-dot"/>:mode==="signin"?<LogIn size={16}/>:<ArrowRight size={16}/>} {busy?"Please wait…":submitLabel}</button>
+      {(mode === "signin" || mode === "signup") && <div className="auth-switch">{mode === "signin" ? "Don’t have an account?" : "Already have an account?"} <button type="button" onClick={()=>{setMode(mode === "signin" ? "signup" : "signin");}}>{mode === "signin" ? "Sign up" : "Log in"}</button></div>}
+      {mode === "reset" && <div className="auth-switch"><button type="button" onClick={()=>setMode("signin")}>Back to log in</button></div>}
+      {notice&&<div className="auth-note" role="status">{notice}</div>}
+      {error&&<div className="auth-note auth-error" role="alert">{error}</div>}
+      {!configured&&<div className="auth-note" role="status">Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in <code>.env.local</code>, then restart the app to enable sign-in.</div>}
+    </form>
+  </section></main>;
 }
 
 function ReceiptSlipList({receipts,onReceiptClick}:{receipts:Receipt[];onReceiptClick?:(receipt:Receipt)=>void}) {

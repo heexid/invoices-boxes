@@ -123,6 +123,40 @@ body.printing-roll .box-receipt-slip{max-width:none;margin:0 auto 18px;box-shado
 .box-detail-page .box-receipt-slip .paper-head small{font-size:8px;overflow-wrap:anywhere}
 .box-detail-page .box-receipt-slip .paper-line{grid-template-columns:18px minmax(0,1fr) auto;gap:4px;font-size:9px}
 .box-detail-page .box-receipt-slip .paper-line span:nth-child(2){min-width:0;overflow-wrap:anywhere}
+
+/* Compact, account-first authentication */
+.auth-shell{min-height:100svh;width:100%;max-width:480px;margin:0 auto;padding:32px 22px;display:grid;place-items:center;grid-template-columns:1fr;background:#fffefa}
+.auth-card{width:min(100%,380px);margin:auto}
+.auth-brand{display:flex;align-items:center;gap:8px;margin-bottom:34px;color:var(--ink);font-size:17px;font-weight:650;letter-spacing:-.5px}
+.auth-brand img{display:block;width:30px;height:30px;object-fit:contain}
+.auth-form{width:100%;max-width:none}
+.auth-form h1,.auth-success-card h1{margin:0 0 8px;font-size:28px;line-height:1.15;letter-spacing:-1.1px;font-weight:600}
+.auth-description,.auth-success-card>p{margin:0 0 27px;color:#85847c;font-size:13px;line-height:1.55}
+.auth-form .field{margin-bottom:17px;gap:7px}
+.auth-form .field label{font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:#37372f}
+.auth-required{color:#b34a3f}
+.auth-form .field input{width:100%;height:45px;padding:0 12px;border-radius:7px;border-color:#dedbd2;font-size:13px;background:#fff}
+.auth-form .field input::placeholder{color:#a19f98}
+.auth-password-field{position:relative;display:flex;align-items:center}
+.auth-password-field input{padding-right:46px!important}
+.auth-password-toggle{position:absolute;right:3px;width:40px;height:40px;border:0;border-radius:6px;background:transparent;color:#4e554d;display:grid;place-items:center}
+.auth-password-toggle:hover{background:#f4f2ec}
+.auth-forgot{display:flex;justify-content:flex-end;margin:-3px 0 18px}
+.auth-forgot button,.auth-switch button{padding:0;border:0;background:none;color:var(--green);font-size:12px;font-weight:600;text-decoration:none}
+.auth-submit{width:100%;height:46px;margin-top:1px;border-radius:7px;font-weight:600;box-shadow:none}
+.auth-switch{margin-top:22px;color:#77766f;font-size:12px}
+.auth-switch button{margin-left:3px}
+.auth-note{overflow-wrap:anywhere;word-break:normal;border:1px solid #e7e4dc;background:#f7f5ef;color:#68675e;padding:11px 12px;font-size:12px}
+.auth-note code{overflow-wrap:anywhere}
+.auth-error{border-color:#e8c8c1;background:#fbefeb;color:#873e34}
+.auth-success-card{text-align:center}
+.auth-success-card .auth-brand{justify-content:center;margin-bottom:38px}
+.auth-success-icon{width:54px;height:54px;margin:0 auto 19px;border-radius:50%;display:grid;place-items:center;background:#e7f0e9;color:var(--green)}
+.auth-success-card>p{margin:0 0 23px;overflow-wrap:anywhere}
+.auth-success-card .primary-btn{width:100%;height:46px;border-radius:7px}
+.auth-success-card .auth-countdown{margin:15px 0 0;font-size:11px}
+.auth-loading{color:#77766f;font-size:13px}
+@media(max-width:380px){.auth-shell{padding:25px 19px}.auth-brand{margin-bottom:28px}.auth-form h1,.auth-success-card h1{font-size:25px}}
 .box-detail-page .box-receipt-slip .paper-line span:last-child{font-size:8px}
 .box-detail-page .box-receipts-empty{grid-column:1/-1}
 .detail-modal-head{justify-content:flex-end;margin-bottom:12px}

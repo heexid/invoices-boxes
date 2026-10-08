@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256"><title>Invoices Boxes</title><rect width="256" height="256" rx="57.6" fill="#17364A"/><g transform="translate(40.45 40.45) scale(0.684)">
+  <title id="title">Invoices Boxes mark</title>
+  <rect x="12" y="12" width="232" height="232" rx="52" fill="#17364A"/>
+  <!-- Invoice page with a distinct folded corner. -->
+  <path d="M73 40h76l35 35v91H73z" fill="#FFF4DE"/>
+  <path d="M149 40v35h35" fill="#FFF4DE"/>
+  <path d="M92 96h66M92 121h48" fill="none" stroke="#17364A" stroke-width="12" stroke-linecap="round"/>
+  <!-- Open carton in front of the invoice: one silhouette, clear at favicon scale. -->
+  <path d="m47 151 81-35 81 35-81 38z" fill="#F27755"/>
+  <path d="m47 151 81 38v49l-81-39z" fill="#F27755"/>
+  <path d="m209 151-81 38v49l81-39z" fill="#F27755"/>
+  <path d="m47 151 35-47 38 19-43 47z" fill="#F27755"/>
+  <path d="m209 151-35-47-38 19 43 47z" fill="#F27755"/>
+  <path d="m128 157 16 8v51l-16 9z" fill="#17364A"/>
+</g></svg>

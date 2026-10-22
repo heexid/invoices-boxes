@@ -277,3 +277,64 @@ body.printing-roll .box-receipt-slip{max-width:none;margin:0 auto 18px;box-shado
 .toast-error{background:#9a4e43;color:#fff}
 .toast-info{background:#363b34;color:#fff}
 @media(max-width:560px){.tax-input-row{grid-template-columns:auto 88px minmax(0,1fr)}.line-item-edit-row .field input{font-size:12px}}
+
+/* Interaction and typography refinements. Keep these late so they consolidate
+   the earlier exploratory styles without changing the established visual language. */
+:root{--ease-out:cubic-bezier(.23,1,.32,1);--focus:#2f634a}
+html{scroll-padding-block-start:72px}
+body{-moz-osx-font-smoothing:grayscale}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline-color:var(--focus)}
+.mono,.month-year,.receipt-amount,.box-info,.box-stamp,.detail-stamp,.paper-head,.paper-line,.paper-total,.stat-card strong{font-variant-numeric:tabular-nums}
+.auth-brand{font-weight:600}
+.icon-btn,.pill-btn{transition:border-color .18s var(--ease-out),background-color .18s var(--ease-out),transform .15s var(--ease-out),scale .15s var(--ease-out)}
+.primary-btn,.secondary-btn,.close-btn,.subtle-link,.box-export-btn,.detail-nav-back,.detail-nav-menu,.detail-nav-preview,.toggle-original,.mobile-scan,.item-row-actions button{transition:background-color .18s var(--ease-out),border-color .18s var(--ease-out),color .18s var(--ease-out),transform .15s var(--ease-out),scale .15s var(--ease-out)}
+.box-card{transition:transform .2s var(--ease-out),box-shadow .2s var(--ease-out),scale .15s var(--ease-out)}
+button:not(:disabled):active{scale:.96}
+.modal-backdrop{overscroll-behavior:contain}
+.modal,.delete-confirm-dialog,.box-actions-menu{overscroll-behavior:contain}
+.toast:empty{display:none}
+.toast{transition:opacity .2s var(--ease-out),transform .2s var(--ease-out)}
+.receipt-row{width:100%;border-inline:0;background:transparent;text-align:start;font:inherit;color:inherit}
+
+@media (hover:hover) and (pointer:fine){
+  .icon-btn:hover,.pill-btn:hover{border-color:#b8c6b8;transform:translateY(-1px)}
+  .primary-btn:hover{background:#345642;transform:translateY(-1px)}
+  .box-card:hover{transform:translateY(-4px) rotate(-.5deg);box-shadow:0 12px 22px #59432b26,inset 0 0 0 5px #d0a176}
+  .receipt-row:hover{padding-left:4px;background:#fdfcf8}
+  .auth-password-toggle:hover,.detail-nav-back:hover,.detail-nav-preview:hover,.detail-nav-menu:hover,.box-actions-menu button:hover{background:#f3f4ef}
+  .box-export-btn:not(:disabled):hover{background:#f5f4ee;border-color:#b9c2b6;text-decoration:none}
+  .danger-btn:hover{background:#854c3d}
+}
+
+@media(max-width:767px){
+  .auth-form .field input,.field input,.field select,.field textarea,.recent-search-field input,.recent-date-filters select,.box-receipt-filters select,.move-row select,.tax-input-row select,.tax-input-row input{font-size:16px}
+  .receipt-editor .receipt-form-grid .field input,.receipt-editor .receipt-form-grid .field select,.receipt-editor .receipt-form-grid .field textarea,.line-item-edit-row .field input{font-size:16px}
+  .tax-input-row{grid-template-columns:auto 112px minmax(0,1fr)}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+@media (hover:none), (pointer:coarse){
+  .icon-btn:hover,.pill-btn:hover{border-color:var(--line);transform:none}
+  .primary-btn:hover{background:var(--green);transform:none}
+  .box-card:hover{transform:none;box-shadow:0 5px 13px #59432b16,inset 0 0 0 5px #d0a176}
+  .receipt-row:hover{padding-left:0;background:transparent}
+  .auth-password-toggle:hover,.detail-nav-back:hover,.detail-nav-preview:hover,.detail-nav-menu:hover,.box-actions-menu button:hover{background:transparent}
+  .box-export-btn:not(:disabled):hover{background:#fffefa;border-color:var(--line);text-decoration:none}
+  .danger-btn:hover{background:#9b5d4b}
+}
+
+/* Short page transitions and data-shaped placeholders prevent state changes
+   from feeling abrupt without adding motion to dense, repeat-use controls. */
+.screen-transition{min-width:0}
+.toast-region{position:fixed;z-index:40;top:calc(env(safe-area-inset-top, 0px) + 14px);left:50%;transform:translateX(-50%);pointer-events:none}
+.toast-region .toast{position:relative;top:auto;left:auto;transform:none;pointer-events:auto}
+.skeleton-line,.skeleton-hero,.skeleton-box{display:block;background:linear-gradient(100deg,#eeece4 20%,#f7f5ef 40%,#eeece4 60%);background-size:200% 100%;animation:skeleton-shimmer 1.35s linear infinite}
+.auth-skeleton{display:grid;gap:16px;align-content:center;min-height:405px}
+.skeleton-brand{width:92px;height:30px;border-radius:7px;margin-bottom:17px}.skeleton-title{width:57%;height:32px;border-radius:6px}.skeleton-copy{width:86%;height:13px;border-radius:4px}.skeleton-field{width:100%;height:45px;border-radius:7px}.skeleton-submit{width:100%;height:46px;border-radius:7px;margin-top:6px}
+.drawer-skeleton{display:grid;gap:22px;max-width:760px;margin:0 auto;padding:21px 0 42px}.drawer-skeleton-header{display:flex;align-items:center;justify-content:space-between;height:61px;border-bottom:1px solid var(--line)}.skeleton-avatar,.skeleton-icon{width:38px;height:38px;border-radius:50%}.drawer-skeleton-heading{display:grid;gap:9px}.skeleton-year{width:42px;height:11px;border-radius:4px}.skeleton-month{width:132px;height:39px;border-radius:7px}.drawer-skeleton-heading .skeleton-copy{width:164px}.skeleton-hero{height:300px;border-radius:7px}.drawer-skeleton-section{display:grid;gap:13px}.skeleton-section-title{width:94px;height:20px;border-radius:5px}.skeleton-box-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.skeleton-box{height:155px;border-radius:7px}
+@keyframes skeleton-shimmer{to{background-position:-200% 0}}
+@media(max-width:767px){.drawer-skeleton{padding-top:0;gap:19px}.skeleton-hero{height:300px}.toast-region{top:calc(env(safe-area-inset-top, 0px) + 14px)}}
+@media(prefers-reduced-motion:reduce){.screen-transition{animation:none}.skeleton-line,.skeleton-hero,.skeleton-box{animation:none;background:#eeece4}}

@@ -56,7 +56,7 @@ export function ReceiptEditor({
   const activePaymentIsCustom = !!draft.payment_method && !paymentMethods.includes(draft.payment_method);
 
   return <section className="receipt-editor" aria-labelledby="modal-title">
-    <div className="modal-head"><div><h2 id="modal-title">{editing ? "A little receipt, tidied up" : "A new little receipt"}</h2><p>{editing ? "Change whatever needs changing." : "Scan a receipt or pop the details in yourself."}</p></div><button className="close-btn" onClick={onClose} aria-label="Close">×</button></div>
+    <div className="modal-head"><div><h2 id="modal-title">{editing ? "A little receipt, tidied up" : "A new little receipt"}</h2><p>{editing ? "Change whatever needs changing." : "Scan a receipt or pop the details in yourself."}</p></div><button className="close-btn" onClick={onClose} aria-label="Close receipt editor">×</button></div>
     {!editing&&<>
       {fileName ? <div className="upload-preview">{fileUrl?<img src={fileUrl} alt="Selected receipt preview"/>:<><FileText size={25}/><span>{fileName}</span></>}</div> : <button type="button" className="upload-zone" onClick={onChooseFile} onDragOver={(event)=>event.preventDefault()} onDrop={(event)=>{event.preventDefault();const uploaded=event.dataTransfer.files?.[0];if(uploaded)onDropFile(uploaded);}}>
         <span className="upload-icon"><ImagePlus size={23}/></span><b>Drop your receipt right in</b><span>Take a photo or choose a photo or PDF</span><span className="secondary-btn" style={{marginTop:6,fontSize:11}}><Upload size={14}/> Choose a file</span>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { ArrowDownToLine, ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Eye, EyeOff, FileImage, FileText, Info, LogIn, LogOut, MoreVertical, Pencil, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import { formatDay, formatIDR, formatMoney, formatShortDate, formatTotals } from "@/lib/data";
 import { getSupabase } from "@/lib/supabase";
@@ -25,6 +25,7 @@ export default function HomePage() {
   const [screen, setScreen] = useState<Screen>("auth");
   const [authMode, setAuthMode] = useState<AuthMode>("signin");
   const [authLoading, setAuthLoading] = useState(true);
+  const [accountLoading, setAccountLoading] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
   const [userEmail, setUserEmail] = useState<string>();
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -82,24 +83,29 @@ export default function HomePage() {
 
   const loadAccount = useCallback(async () => {
     if (!supabase) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return;
-    setUserEmail(session.user.email);
-    const [{ data: boxRows, error: boxError }, { data: receiptRows, error: receiptError }] = await Promise.all([
-      supabase.from("boxes").select("*").order("sort_order").order("created_at"),
-      supabase.from("receipts").select("*").order("created_at", { ascending: false }),
-    ]);
-    if (boxError || receiptError) { notifyError(`Couldn’t load your drawer: ${(boxError ?? receiptError)?.message ?? "check your Supabase setup"}`); return; }
-    const ids = (receiptRows ?? []).map((row) => row.id);
-    const { data: itemRows, error: itemError } = ids.length ? await supabase.from("line_items").select("*").in("receipt_id", ids).order("position") : { data: [], error: null };
-    if (itemError) { notifyError(`Couldn’t load receipt items: ${itemError.message}`); return; }
-    const grouped = new Map<string, Array<Record<string, unknown>>>();
-    for (const item of itemRows ?? []) grouped.set(item.receipt_id, [...(grouped.get(item.receipt_id) ?? []), item]);
-    setBoxes((boxRows ?? []) as Box[]);
-    setReceipts((receiptRows ?? []).map((row: Record<string, unknown>) => ({ ...row, line_items: grouped.get(row.id as string) ?? [] })) as Receipt[]);
-    setSelectedBox((current) => boxRows?.some((box) => box.id === current)
-      ? current
-      : (boxRows?.[0] as Box | undefined)?.id ?? "");
+    setAccountLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      setUserEmail(session.user.email);
+      const [{ data: boxRows, error: boxError }, { data: receiptRows, error: receiptError }] = await Promise.all([
+        supabase.from("boxes").select("*").order("sort_order").order("created_at"),
+        supabase.from("receipts").select("*").order("created_at", { ascending: false }),
+      ]);
+      if (boxError || receiptError) { notifyError(`Couldn’t load your drawer: ${(boxError ?? receiptError)?.message ?? "check your Supabase setup"}`); return; }
+      const ids = (receiptRows ?? []).map((row) => row.id);
+      const { data: itemRows, error: itemError } = ids.length ? await supabase.from("line_items").select("*").in("receipt_id", ids).order("position") : { data: [], error: null };
+      if (itemError) { notifyError(`Couldn’t load receipt items: ${itemError.message}`); return; }
+      const grouped = new Map<string, Array<Record<string, unknown>>>();
+      for (const item of itemRows ?? []) grouped.set(item.receipt_id, [...(grouped.get(item.receipt_id) ?? []), item]);
+      setBoxes((boxRows ?? []) as Box[]);
+      setReceipts((receiptRows ?? []).map((row: Record<string, unknown>) => ({ ...row, line_items: grouped.get(row.id as string) ?? [] })) as Receipt[]);
+      setSelectedBox((current) => boxRows?.some((box) => box.id === current)
+        ? current
+        : (boxRows?.[0] as Box | undefined)?.id ?? "");
+    } finally {
+      setAccountLoading(false);
+    }
   }, [supabase, notifyError]);
 
   useEffect(() => {
@@ -345,17 +351,23 @@ export default function HomePage() {
 
   function renderBoxCard(box: Box, index: number) {
     const contents = monthReceipts.filter((receipt) => receipt.box_id === box.id);
-    return <motion.button key={box.id} className="box-card" data-tone={box.color || ["sage","cream","pink","blue","yellow"][index%5]} onClick={()=>{setSelectedBox(box.id);setScreen("box");setSelectedReceipt(null);}} onDragOver={(event)=>event.preventDefault()} onDrop={(event)=>{event.preventDefault();const receipt=receipts.find((item)=>item.id===event.dataTransfer.getData("text/plain"));if(receipt)void moveReceipt(receipt,box.id);}} whileTap={{scale:.985}} aria-label={`${box.name} box, ${formatTotals(contents)}`}>
+    return <motion.button key={box.id} className="box-card" data-tone={box.color || ["sage","cream","pink","blue","yellow"][index%5]} onClick={()=>{setSelectedBox(box.id);setScreen("box");setSelectedReceipt(null);}} onDragOver={(event)=>event.preventDefault()} onDrop={(event)=>{event.preventDefault();const receipt=receipts.find((item)=>item.id===event.dataTransfer.getData("text/plain"));if(receipt)void moveReceipt(receipt,box.id);}} whileTap={{scale:.96}} aria-label={`${box.name} box, ${formatTotals(contents)}`}>
       {contents.slice(0,2).map((receipt,i)=><div className={`mini-slip ${i===0?"a":"b"}`} key={receipt.id}><b>{receipt.merchant}</b><span>{formatDay(receipt.date)} AUG</span><b style={{marginTop:5}}>{formatMoney(receipt.total, receipt.currency)}</b><i/></div>)}
       <span className="box-object">{box.illustration==="tomato"?"🍅":box.illustration==="cup"?"☕":box.illustration==="fork"?"🍴":box.illustration==="car"?"🚕":box.illustration==="flower"?"🌼":box.illustration||"📦"}</span>
       <span className="box-info"><span className="box-info-name">{box.name}</span><strong>{formatTotals(contents)}</strong><span className="box-info-count">×{contents.length}</span></span>
     </motion.button>;
   }
 
-  if (authLoading) return <main className="auth-shell auth-loading"><div role="status" aria-live="polite">Opening your drawer…</div></main>;
+  if (authLoading) return <AuthLoadingSkeleton/>;
   if (screen === "auth") return <AuthScreen mode={authMode} setMode={setAuthMode} busy={authBusy} configured={!!supabase} onSubmit={handleAuth} notice={authNotice} error={authError} signupEmail={signupEmail} />;
 
-  return <main className="app-shell">
+  const dialogOpen = Boolean(modal || selectedReceipt || pendingDelete);
+
+  return <MotionConfig reducedMotion="user"><main className="app-shell">
+    <div className="app-content" aria-hidden={dialogOpen || undefined} inert={dialogOpen || undefined}>
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div key={accountLoading ? "loading" : screen} className="screen-transition" initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-3}} transition={{duration:.18,ease:[.23,1,.32,1]}}>
+      {accountLoading ? <DrawerSkeleton/> : <>
     {screen === "drawer" && <div className="drawer-sticky-header"><header className="topbar no-print">
       <div className="email-avatar" role="img" aria-label={`Avatar for ${emailName(userEmail) || "your account"}`} title={emailName(userEmail) || "Your account"}>{emailName(userEmail) ? emailName(userEmail).slice(0, 3).toUpperCase() : "A"}</div>
       <div className="header-brand"><button className="icon-btn profile-trigger" onClick={openProfile} aria-label="Open profile"><UserRound size={17}/></button></div>
@@ -381,9 +393,9 @@ export default function HomePage() {
           </div>
         </div>
         <div className="recent-page-list">
-          {visibleRecentReceipts.length ? visibleRecentReceipts.map((receipt)=>{const added=addedAtDate(receipt);return <div key={receipt.id} className="receipt-row" onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}} role="button" tabIndex={0} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedReceipt(receipt);setShowOriginal(false);}}}>
+          {visibleRecentReceipts.length ? visibleRecentReceipts.map((receipt)=>{const added=addedAtDate(receipt);return <button type="button" key={receipt.id} className="receipt-row" onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}}>
             <span className="date-chip"><small>{added.toLocaleDateString("en",{month:"short"})}</small>{String(added.getDate()).padStart(2,"0")}</span><span style={{minWidth:0}}><span className="merchant-name" style={{display:"block"}}>{receipt.merchant}</span><span className="merchant-meta">{boxes.find((box)=>box.id===receipt.box_id)?.name??"Unfiled"}</span></span><span className="receipt-amount">{formatMoney(receipt.total, receipt.currency)}</span>
-          </div>;}):receipts.length?<div className="recent-no-results"><EmptyState kind="receipts" title="No receipts match" copy="Try another search or change the date filters." className="recent-empty-state"/><button className="subtle-link" onClick={()=>{setRecentQuery("");setRecentYear("all");setRecentMonth("all");}}>Clear search and filters</button></div>:<EmptyState kind="receipts" title="No receipts yet" copy="Your new receipts will appear here after you add one." className="recent-empty-state"/>}
+          </button>;}):receipts.length?<div className="recent-no-results"><EmptyState kind="receipts" title="No receipts match" copy="Try another search or change the date filters." className="recent-empty-state"/><button className="subtle-link" onClick={()=>{setRecentQuery("");setRecentYear("all");setRecentMonth("all");}}>Clear search and filters</button></div>:<EmptyState kind="receipts" title="No receipts yet" copy="Your new receipts will appear here after you add one." className="recent-empty-state"/>}
         </div>
       </div>
     </section> : screen === "profile" ? <section className="profile-page">
@@ -398,7 +410,7 @@ export default function HomePage() {
       <nav className="detail-navbar preview-navbar"><button className="detail-nav-back" onClick={()=>setScreen("box")} aria-label="Back to box"><ChevronLeft size={22}/></button></nav>
       <div className="print-preview-content"><ReceiptSlipList receipts={boxAllReceipts}/><button className="primary-btn preview-print-button no-print" onClick={printBox}><FileText size={15}/> Print roll</button></div>
     </section> : screen==="box"&&activeBox?<section className="box-detail-page">
-      <nav className="detail-navbar"><button className="detail-nav-back" onClick={()=>setScreen("drawer")} aria-label="Back to drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title" title={activeBox.name}>{activeBox.name}</h1><div className="detail-nav-actions"><div className="box-menu-wrap"><button className="detail-nav-menu" aria-label="Box actions" aria-haspopup="menu" aria-expanded={boxMenuOpen} onClick={()=>setBoxMenuOpen((open)=>!open)}><MoreVertical size={20}/></button>{boxMenuOpen&&<div className="box-actions-menu" role="menu"><button role="menuitem" onClick={()=>{setBoxMenuOpen(false);setScreen("print-preview");}}><FileText size={14}/> Preview print roll</button><button role="menuitem" onClick={()=>{setBoxMenuOpen(false);openBoxEditor(activeBox);}}><Pencil size={14}/> Edit box</button></div>}</div></div></nav>
+      <nav className="detail-navbar"><button className="detail-nav-back" onClick={()=>setScreen("drawer")} aria-label="Back to drawer"><ChevronLeft size={22}/></button><h1 className="detail-nav-title" title={activeBox.name}>{activeBox.name}</h1><div className="detail-nav-actions"><div className="box-menu-wrap"><button className="detail-nav-menu" aria-label="Box actions" aria-haspopup="menu" aria-expanded={boxMenuOpen} onClick={()=>setBoxMenuOpen((open)=>!open)}><MoreVertical size={20}/></button><AnimatePresence initial={false}>{boxMenuOpen&&<motion.div className="box-actions-menu" role="menu" initial={{opacity:0,scale:.96,y:-4}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.98,y:-2}} transition={{duration:.16,ease:[.23,1,.32,1]}}><button role="menuitem" onClick={()=>{setBoxMenuOpen(false);setScreen("print-preview");}}><FileText size={14}/> Preview print roll</button><button role="menuitem" onClick={()=>{setBoxMenuOpen(false);openBoxEditor(activeBox);}}><Pencil size={14}/> Edit box</button></motion.div>}</AnimatePresence></div></div></nav>
       <div className="box-detail-layout"><div><div className="box-detail-scene" data-tone={activeBox.color}><span className="big-object">{activeBox.illustration==="tomato"?"🍅":activeBox.illustration==="cup"?"☕":activeBox.illustration==="fork"?"🍴":activeBox.illustration==="car"?"🚕":activeBox.illustration==="flower"?"🌼":activeBox.illustration||"📦"}</span><div className="detail-stamp">{activeBox.name}<strong>{formatTotals(boxAllReceipts)}</strong><small>×{boxAllReceipts.length} little things</small></div><div className="detail-paper-stack">{boxAllReceipts.slice(0,4).map((receipt,index)=><button key={receipt.id} className={`detail-mini-paper dm-${index}`} onClick={()=>setSelectedReceipt(receipt)}><b>{receipt.merchant}</b><span>{formatShortDate(receipt.date)}</span><strong>{formatMoney(receipt.total, receipt.currency)}</strong></button>)}</div></div>{activeBox.budget&&<div className="budget-note"><span>This month’s IDR budget</span><span>{formatIDR(boxIDRTotal)} of {formatIDR(activeBox.budget)}</span><div className="budget-track"><i style={{width:`${Math.min(100,Math.round(boxIDRTotal/activeBox.budget*100))}%`}}/></div></div>}<div className="box-export-row no-print"><button className="box-export-btn" onClick={exportBoxCSV} disabled={!boxAllReceipts.length}><ArrowDownToLine size={15}/> Export box to CSV</button></div></div>
         <div className="summary-column"><div className="box-receipts-heading"><div><h2>Receipts</h2><p>{visibleBoxReceipts.length} {visibleBoxReceipts.length === 1 ? "receipt" : "receipts"}</p></div><div className="box-receipt-filters"><label className="box-month-filter"><span className="sr-only">Filter by month</span><select aria-label="Filter receipts by month" value={boxReceiptMonth} onChange={(event)=>setBoxReceiptMonth(event.target.value)}><option value="all">All months</option>{boxReceiptMonths.map((value)=><option key={value} value={value}>{new Date(`${value}-15T12:00:00`).toLocaleDateString("en",{month:"long"})}</option>)}</select><ChevronDown size={14}/></label><label className="box-year-filter"><span className="sr-only">Filter by year</span><select aria-label="Filter receipts by year" value={boxReceiptYear} onChange={(event)=>{setBoxReceiptYear(event.target.value);setBoxReceiptMonth("all");}}><option value="all">All Years</option>{boxReceiptYears.map((year)=><option key={year} value={year}>{year}</option>)}</select></label></div></div><ReceiptSlipList receipts={visibleBoxReceipts} onReceiptClick={setSelectedReceipt}/></div>
       </div>
@@ -422,9 +434,9 @@ export default function HomePage() {
         <div className="panel-card">
           <div className="panel-heading"><h2>Recently added</h2><button className="subtle-link recent-see-all" onClick={openRecentReceipts}>See all</button></div>
           <div className="receipt-list">
-            {recentReceipts.length ? recentReceipts.map((receipt)=><div key={receipt.id} className="receipt-row" draggable onDragStart={(event)=>event.dataTransfer.setData("text/plain",receipt.id)} onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}} role="button" tabIndex={0} onKeyDown={(event)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();setSelectedReceipt(receipt);setShowOriginal(false);}}}>
+            {recentReceipts.length ? recentReceipts.map((receipt)=><button type="button" key={receipt.id} className="receipt-row" draggable onDragStart={(event)=>event.dataTransfer.setData("text/plain",receipt.id)} onClick={()=>{setSelectedReceipt(receipt);setShowOriginal(false);}}>
               <span className="date-chip"><small>{new Date(`${receipt.date}T12:00:00`).toLocaleDateString("en",{month:"short"})}</small>{formatDay(receipt.date)}</span><span style={{minWidth:0}}><span className="merchant-name" style={{display:"block"}}>{receipt.merchant}</span><span className="merchant-meta">{boxes.find((box)=>box.id===receipt.box_id)?.name??"Unfiled"}</span></span><span className="receipt-amount">{formatMoney(receipt.total, receipt.currency)}</span>
-            </div>):<EmptyState kind="receipts" title="No receipts yet" copy="Your newest receipts will show up here after you add one." className="recent-empty-state"/>}
+            </button>):<EmptyState kind="receipts" title="No receipts yet" copy="Your newest receipts will show up here after you add one." className="recent-empty-state"/>}
           </div>
         </div>
       </aside>
@@ -434,29 +446,84 @@ export default function HomePage() {
 
     {screen !== "print-preview"&&<button className="mobile-scan no-print" onClick={openScan}><Plus size={19}/> Add a receipt</button>}
     <input ref={fileInput} type="file" accept="image/*,application/pdf" capture="environment" hidden onChange={chooseFile}/>
+      </>}
+      </motion.div>
+    </AnimatePresence>
+    </div>
 
-    <AnimatePresence>{modal&&<div className="modal-backdrop no-print" onMouseDown={(event)=>{if(event.target===event.currentTarget){setModal(null);setFile(null);}}}>
-      <motion.section className="modal" initial={{opacity:0,y:20,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:10,scale:.98}} transition={{duration:.18}} role="dialog" aria-modal="true" aria-labelledby="modal-title">
-        {modal==="box"&&<div className="modal-head"><div><h2 id="modal-title">Make a new box</h2><p>A home for one of your everyday things.</p></div><button className="close-btn" onClick={()=>setModal(null)} aria-label="Close"><X size={17}/></button></div>}
+    <AnimatePresence initial={false}>{modal&&!pendingDelete&&<AppDialog className="modal" onClose={()=>{setModal(null);setFile(null);setFileUrl("");}} labelledBy="modal-title">
+        {modal==="box"&&<div className="modal-head"><div><h2 id="modal-title">Make a new box</h2><p>A home for one of your everyday things.</p></div><button className="close-btn" onClick={()=>setModal(null)} aria-label="Close box editor"><X size={17}/></button></div>}
         {modal==="scan"?<ReceiptEditor draft={draft} onChange={setDraft} onSubmit={saveReceipt} onChooseFile={()=>fileInput.current?.click()} onDropFile={(nextFile)=>void useFile(nextFile)} onManual={()=>{if(!draft.line_items.length)setDraft((prior)=>({...prior,line_items:[{id:crypto.randomUUID(),description:"",quantity:"1",amount:"",confidence:1}]}));setOcrState("ready");}} onRetry={()=>void retryOCR()} onClose={()=>{setModal(null);setFile(null);setFileUrl("");}} boxes={boxes} ocrState={ocrState} ocrError={ocrError} fileName={file?.name ?? ""} fileUrl={fileUrl} saving={saving} editing={!!editorReceiptId}/>:<form onSubmit={saveBox}><div className="form-grid"><div className="field full"><label>What’s it for?</label><input value={draftBoxName} onChange={(e)=>setDraftBoxName(e.target.value)} placeholder="A little something…" required autoFocus/></div><div className="field"><label>Your little sticker</label><select value={draftIllustration} onChange={(e)=>setDraftIllustration(e.target.value)}>{["📦","🍅","☕","🍴","🚕","🌼","🧺","🪴","📚","🎟️"].map((emoji)=><option key={emoji}>{emoji}</option>)}</select></div><div className="field"><label>Box tint</label><select value={draftColor} onChange={(e)=>setDraftColor(e.target.value)}>{[["cream","Warm paper"],["sage","Quiet sage"],["pink","Dusty rose"],["blue","Soft blue"],["yellow","Honey" ]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div><div className="field"><label>Monthly budget · IDR</label><input type="number" min="0" value={draftBudget} onChange={(e)=>setDraftBudget(e.target.value)} placeholder="No budget needed"/></div><div className="field"><label>Place in the drawer</label><select value={draftOrder} onChange={(e)=>setDraftOrder(Number(e.target.value))}>{Array.from({length:boxes.length+(editingBox?0:1)},(_,index)=><option key={index} value={index}>{index+1}{index===0?"st":index===1?"nd":index===2?"rd":"th"} in the drawer</option>)}</select></div></div><div className="modal-actions">{editingBox?<button type="button" className="secondary-btn" style={{color:"#9b7362"}} onClick={()=>setPendingDelete({kind:"box",box:editingBox})}><Trash2 size={14}/> Delete box</button>:<span/>}<button type="submit" className="primary-btn"><Check size={15}/> {editingBox?"Save changes":"Make my box"}</button></div></form>}
-      </motion.section>
-    </div>}</AnimatePresence>
+    </AppDialog>}</AnimatePresence>
 
-    <AnimatePresence>{selectedReceipt&&<div className="modal-backdrop no-print" onMouseDown={(event)=>{if(event.target===event.currentTarget)setSelectedReceipt(null);}}><motion.section className="modal detail-modal" initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} exit={{opacity:0,y:12}} role="dialog" aria-modal="true" aria-label={`${selectedReceipt.merchant} receipt`}>
-      <div className="modal-head detail-modal-head"><button className="close-btn" onClick={()=>setSelectedReceipt(null)} aria-label="Close"><X size={17}/></button></div>
+    <AnimatePresence initial={false}>{selectedReceipt&&!pendingDelete&&<AppDialog className="modal detail-modal" onClose={()=>setSelectedReceipt(null)} label={`${selectedReceipt.merchant} receipt`}>
+      <div className="modal-head detail-modal-head"><button className="close-btn" onClick={()=>setSelectedReceipt(null)} aria-label="Close receipt"><X size={17}/></button></div>
       <div className="paper-slip"><div className="paper-head"><b>{selectedReceipt.merchant}</b><small>{new Date(`${selectedReceipt.date}T12:00:00`).toLocaleDateString("en",{day:"numeric",month:"long",year:"numeric"})} · {selectedReceipt.currency}</small></div><div className="paper-rule"/>{selectedReceipt.line_items.map((item)=><div className="paper-line" key={item.id}><span>{item.quantity.toString().padStart(2,"0")}</span><span>{item.description}</span><span>{formatMoney(item.amount * item.quantity, selectedReceipt.currency)}</span></div>)}<div className="paper-line"><span/><span>Subtotal</span><span>{formatMoney(selectedReceipt.subtotal, selectedReceipt.currency)}</span></div>{selectedReceipt.tax_enabled||selectedReceipt.tax>0?<div className="paper-line"><span/><span>Tax{selectedReceipt.tax_rate!=null?` · ${selectedReceipt.tax_rate}%`:""}</span><span>{formatMoney(selectedReceipt.tax, selectedReceipt.currency)}</span></div>:null}<div className="paper-line" style={{border:0,color:"#85847b"}}><span/><span>Paid with {selectedReceipt.payment_method}</span><span/></div><div className="paper-total"><span>TOTAL</span><span>{formatMoney(selectedReceipt.total, selectedReceipt.currency)}</span></div><div className="barcode"/></div>
       {selectedReceipt.notes&&<p style={{fontSize:12,color:"#7d7c74",margin:"0 4px 14px",textAlign:"center"}}>“{selectedReceipt.notes}”</p>}
       <div className="move-row"><label htmlFor="move-box">Tuck into</label><select id="move-box" value={selectedReceipt.box_id} onChange={(event)=>void moveReceipt(selectedReceipt,event.target.value)}>{boxes.map((box)=><option key={box.id} value={box.id}>{box.name}</option>)}</select></div>
       <div className="modal-actions"><button className="secondary-btn" onClick={()=>setPendingDelete({kind:"receipt",receipt:selectedReceipt})}><Trash2 size={14}/> Delete</button><button className="primary-btn" onClick={()=>editReceipt(selectedReceipt)}><Pencil size={14}/> Edit receipt</button></div>
       <button className="toggle-original" onClick={()=>setShowOriginal(!showOriginal)}><FileImage size={14}/>{showOriginal?"Hide original":"View original"}<ChevronDown size={13} style={{transform:showOriginal?"rotate(180deg)":undefined}}/></button>
-      {showOriginal&&<div className="original-preview">{originalSignedUrl?<img style={{maxWidth:"100%",maxHeight:260,objectFit:"contain"}} src={originalSignedUrl} alt="Original receipt"/>:selectedReceipt.original_image_url?<span>Opening your original…</span>:<span>No original scan attached to this receipt.</span>}</div>}
-    </motion.section></div>}</AnimatePresence>
-    <AnimatePresence>{pendingDelete&&<div className="modal-backdrop no-print delete-confirm-backdrop" onMouseDown={(event)=>{if(event.target===event.currentTarget)setPendingDelete(null);}}><motion.section className="delete-confirm-dialog" initial={{opacity:0,y:12,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:8,scale:.98}} role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title" aria-describedby="delete-confirm-copy">
+      <AnimatePresence initial={false}>{showOriginal&&<motion.div className="original-preview" initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.16,ease:[.23,1,.32,1]}}>{originalSignedUrl?<img style={{maxWidth:"100%",maxHeight:260,objectFit:"contain"}} src={originalSignedUrl} alt="Original receipt"/>:selectedReceipt.original_image_url?<span>Opening your original…</span>:<span>No original scan attached to this receipt.</span>}</motion.div>}</AnimatePresence>
+    </AppDialog>}</AnimatePresence>
+    <AnimatePresence initial={false}>{pendingDelete&&<AppDialog className="delete-confirm-dialog" onClose={()=>setPendingDelete(null)} labelledBy="delete-confirm-title" describedBy="delete-confirm-copy" alert>
       <div className="delete-confirm-icon"><Trash2 size={19}/></div><h2 id="delete-confirm-title">{pendingDelete.kind==="receipt"?"Delete this receipt?":"Delete this box?"}</h2><p id="delete-confirm-copy">{pendingDelete.kind==="receipt"?<>“{pendingDelete.receipt.merchant}” and its saved receipt details will be permanently removed.</>:<>“{pendingDelete.box.name}” will be removed. Receipts inside it will become unfiled.</>}</p>
       <div className="delete-confirm-actions"><button className="secondary-btn" onClick={()=>setPendingDelete(null)}>Cancel</button><button className="danger-btn" onClick={()=>{const target=pendingDelete;setPendingDelete(null);if(target.kind==="receipt")void deleteReceipt(target.receipt);else void deleteBox(target.box);}}>Delete {pendingDelete.kind}</button></div>
-    </motion.section></div>}</AnimatePresence>
-    {toast&&<div className={`toast toast-${toastKind}`} role={toastKind==="error"?"alert":"status"}>{toastKind==="success"?<Check size={15} aria-hidden="true"/>:toastKind==="error"?<CircleAlert size={15} aria-hidden="true"/>:<Info size={15} aria-hidden="true"/>}{toast}</div>}
-  </main>;
+    </AppDialog>}</AnimatePresence>
+    <div className="toast-region" aria-live="polite" aria-atomic="true"><AnimatePresence initial={false}>{toast&&<motion.div className={`toast toast-${toastKind}`} role={toastKind==="error"?"alert":"status"} initial={{opacity:0,y:-10,scale:.98}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:-8,scale:.98}} transition={{duration:.18,ease:[.23,1,.32,1]}}>{toastKind==="success"?<Check size={15} aria-hidden="true"/>:toastKind==="error"?<CircleAlert size={15} aria-hidden="true"/>:<Info size={15} aria-hidden="true"/>}{toast}</motion.div>}</AnimatePresence></div>
+  </main></MotionConfig>;
+}
+
+function AuthLoadingSkeleton() {
+  return <main className="auth-shell auth-loading" aria-busy="true" aria-label="Opening your drawer"><section className="auth-card auth-skeleton" role="status"><span className="skeleton-line skeleton-brand"/><span className="skeleton-line skeleton-title"/><span className="skeleton-line skeleton-copy"/><span className="skeleton-line skeleton-field"/><span className="skeleton-line skeleton-field"/><span className="skeleton-line skeleton-submit"/><span className="sr-only">Opening your drawer…</span></section></main>;
+}
+
+function DrawerSkeleton() {
+  return <section className="drawer-skeleton" aria-busy="true" aria-label="Loading your drawer" role="status"><div className="drawer-skeleton-header"><span className="skeleton-line skeleton-avatar"/><span className="skeleton-line skeleton-icon"/></div><div className="drawer-skeleton-heading"><span className="skeleton-line skeleton-year"/><span className="skeleton-line skeleton-month"/><span className="skeleton-line skeleton-copy"/></div><div className="skeleton-hero"/><div className="drawer-skeleton-section"><span className="skeleton-line skeleton-section-title"/><div className="skeleton-box-grid"><span className="skeleton-box"/><span className="skeleton-box"/></div></div><span className="sr-only">Loading your drawer…</span></section>;
+}
+
+function AppDialog({ children, className, onClose, labelledBy, describedBy, label, alert = false }: {
+  children: ReactNode;
+  className: string;
+  onClose: () => void;
+  labelledBy?: string;
+  describedBy?: string;
+  label?: string;
+  alert?: boolean;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusDialog = () => {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const target = dialog.querySelector<HTMLElement>("[autofocus]") ?? dialog.querySelector<HTMLElement>(focusableSelector) ?? dialog;
+      target.focus();
+    };
+    const frame = window.requestAnimationFrame(focusDialog);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); onCloseRef.current(); return; }
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(focusableSelector)].filter((element) => !element.hasAttribute("hidden"));
+      if (!focusable.length) { event.preventDefault(); dialog.focus(); return; }
+      const first = focusable[0]; const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => { window.cancelAnimationFrame(frame); document.removeEventListener("keydown", handleKeyDown); previousFocus?.focus(); };
+  }, []);
+
+  return <div className="modal-backdrop no-print" onMouseDown={(event)=>{if(event.target===event.currentTarget)onClose();}}>
+    <motion.section ref={dialogRef} className={className} initial={{ opacity: 0, y: 12, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .98 }} transition={{ duration: .2, ease: [0.23, 1, 0.32, 1] }} role={alert ? "alertdialog" : "dialog"} aria-modal="true" aria-labelledby={labelledBy} aria-describedby={describedBy} aria-label={label} tabIndex={-1}>
+      {children}
+    </motion.section>
+  </div>;
 }
 
 function AuthScreen({mode,setMode,busy,configured,onSubmit,notice,error,signupEmail}:{mode:AuthMode;setMode:(mode:AuthMode)=>void;busy:boolean;configured:boolean;onSubmit:(event:FormEvent<HTMLFormElement>)=>void;notice:string;error:string;signupEmail:string}) {
@@ -467,20 +534,20 @@ function AuthScreen({mode,setMode,busy,configured,onSubmit,notice,error,signupEm
     return () => window.clearTimeout(timer);
   }, [mode, setMode]);
 
-  if (mode === "signup-success") return <main className="auth-shell"><section className="auth-card auth-success-card" aria-live="polite">
+  if (mode === "signup-success") return <main className="auth-shell"><motion.section className="auth-card auth-success-card" aria-live="polite" initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} transition={{duration:.18,ease:[.23,1,.32,1]}}>
     <div className="auth-brand"><img src="/icon.svg" alt=""/><span>drawer</span></div>
     <div className="auth-success-icon"><Check size={24}/></div><h1>Account created</h1>
     <p>Your account is ready{signupEmail ? ` for ${signupEmail}` : ""}. Sign in with your email and password to open your drawer.</p>
     <button type="button" className="primary-btn" onClick={()=>{setMode("signin");}}>Continue to sign in</button>
     <p className="auth-countdown">Returning to sign in in a moment…</p>
-  </section></main>;
+  </motion.section></main>;
 
   const passwordMode = mode === "signin" || mode === "signup" || mode === "update-password";
   const title = mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : mode === "reset" ? "Reset password" : "Choose a new password";
   const description = mode === "signin" ? "Enter your email and password to access your drawer." : mode === "signup" ? "A little home for your receipts and everyday spending." : mode === "reset" ? "We’ll send a secure password reset link to your email." : "Choose a new password for your account.";
   const submitLabel = mode === "signin" ? "Log in" : mode === "signup" ? "Create account" : mode === "reset" ? "Send reset link" : "Update password";
 
-  return <main className="auth-shell"><section className="auth-card">
+  return <main className="auth-shell"><AnimatePresence mode="wait" initial={false}><motion.section key={mode} className="auth-card" initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.18,ease:[.23,1,.32,1]}}>
     <div className="auth-brand"><img src="/icon.svg" alt=""/><span>drawer</span></div>
     <form className="auth-form" onSubmit={onSubmit}>
       <h1>{title}</h1><p className="auth-description">{description}</p>
@@ -494,7 +561,7 @@ function AuthScreen({mode,setMode,busy,configured,onSubmit,notice,error,signupEm
       {error&&<div className="auth-note auth-error" role="alert">{error}</div>}
       {!configured&&<div className="auth-note" role="status">Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in <code>.env.local</code>, then restart the app to enable sign-in.</div>}
     </form>
-  </section></main>;
+  </motion.section></AnimatePresence></main>;
 }
 
 function ReceiptSlipList({receipts,onReceiptClick}:{receipts:Receipt[];onReceiptClick?:(receipt:Receipt)=>void}) {
